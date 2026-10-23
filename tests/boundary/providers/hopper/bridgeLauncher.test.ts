@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { access, chmod, rm, writeFile } from "node:fs/promises";
@@ -247,40 +248,46 @@ describe("Hopper bridge launcher selection", () => {
     });
   });
 
-  it("rejects launcher bytes changed since publisher verification before executing them", async () => {
-    const directory = await createTestTempDirectory("rea-hopper-wrapper-");
-    const wrapper = join(directory, "hopper-wrapper");
-    const marker = join(directory, "executed");
-    try {
-      await writeFile(wrapper, `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`);
-      await chmod(wrapper, 0o700);
-      await expect(
-        execFileAsync(
-          "python3",
-          [
-            demoHelperPath,
-            "--hopper",
-            wrapper,
-            "--expected-launcher-sha256",
-            verifiedSha256,
-            "--socket",
-            join(directory, "bridge.sock"),
-            "--",
-            wrapper,
-          ],
-          { timeout: 3_000 },
-        ),
-      ).rejects.toMatchObject({
-        code: 72,
-        stderr: expect.stringContaining(
-          '"failure_code":"unsupported_hopper_build"',
-        ),
-      });
-      await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(process.platform !== "linux")(
+    "rejects launcher bytes changed since publisher verification before executing them",
+    async () => {
+      const directory = await createTestTempDirectory("rea-hopper-wrapper-");
+      const wrapper = join(directory, "hopper-wrapper");
+      const marker = join(directory, "executed");
+      try {
+        await writeFile(
+          wrapper,
+          `#!/bin/sh\ntouch ${JSON.stringify(marker)}\n`,
+        );
+        await chmod(wrapper, 0o700);
+        await expect(
+          execFileAsync(
+            pythonCommand,
+            [
+              demoHelperPath,
+              "--hopper",
+              wrapper,
+              "--expected-launcher-sha256",
+              verifiedSha256,
+              "--socket",
+              join(directory, "bridge.sock"),
+              "--",
+              wrapper,
+            ],
+            { timeout: 3_000 },
+          ),
+        ).rejects.toMatchObject({
+          code: 72,
+          stderr: expect.stringContaining(
+            '"failure_code":"unsupported_hopper_build"',
+          ),
+        });
+        await expect(access(marker)).rejects.toMatchObject({ code: "ENOENT" });
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 it("launches Hopper helpers with the caller-selected environment without restoring ambient values", async () => {
@@ -288,7 +295,12 @@ it("launches Hopper helpers with the caller-selected environment without restori
   const targetPath = join(directory, "target");
   await writeFile(targetPath, "fixture target");
   const launcher = new HopperApplicationLauncher({
-    environment: { REA_SELECTED_VALUE: "caller-value" },
+    environment: {
+      REA_SELECTED_VALUE: "caller-value",
+      ...(process.platform === "win32"
+        ? { SystemRoot: process.env.SystemRoot }
+        : {}),
+    },
     launcherPath: process.execPath,
     targetPath,
     targetKind: "executable",

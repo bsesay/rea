@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -8,6 +9,8 @@ import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js
 import { createDirectAnalysis } from "../../../../src/composition/directAnalysis.js";
 import { artifactInspectionResultSchema } from "../../../../src/domain/artifactInspection.js";
 import { parseEvidence } from "../../../../src/domain/evidence.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 const { runProviderAnalysis } = createDirectAnalysis({});
 
@@ -101,38 +104,44 @@ describe("directory inspection probes", () => {
     },
   );
 
-  it("preserves plist inspection for a readable Info.plist symlink", async () => {
-    const root = await createTestTempDirectory("rea-artifact-plist-link-");
-    const bundle = join(root, "Fixture.app");
-    await writeTree(bundle, { "Contents/MacOS/Fixture": MACH_O_64 });
-    await writeFile(join(root, "bundle-metadata"), INFO_PLIST);
-    await symlink(
-      join(root, "bundle-metadata"),
-      join(bundle, "Contents/Info.plist"),
-    );
-    expect(await probeOperations(bundle)).toEqual([
-      "open_binary",
-      "inspect_plist",
-    ]);
-  });
+  symbolicLinkTest(
+    "preserves plist inspection for a readable Info.plist symlink",
+    async () => {
+      const root = await createTestTempDirectory("rea-artifact-plist-link-");
+      const bundle = join(root, "Fixture.app");
+      await writeTree(bundle, { "Contents/MacOS/Fixture": MACH_O_64 });
+      await writeFile(join(root, "bundle-metadata"), INFO_PLIST);
+      await symlink(
+        join(root, "bundle-metadata"),
+        join(bundle, "Contents/Info.plist"),
+      );
+      expect(await probeOperations(bundle)).toEqual([
+        "open_binary",
+        "inspect_plist",
+      ]);
+    },
+  );
 
-  it("does not propose JavaScript analysis for a symlink the analyzers never follow", async () => {
-    const root = await createTestTempDirectory("rea-artifact-symlink-");
-    const bundle = join(root, "Fixture.app");
-    await writeTree(bundle, {
-      "Contents/MacOS/Fixture": MACH_O_64,
-      "Contents/Info.plist": INFO_PLIST,
-    });
-    await writeTree(root, { "outside.js": "console.log('outside');\n" });
-    await mkdir(join(bundle, "Contents/Resources"));
-    await symlink(
-      join(root, "outside.js"),
-      join(bundle, "Contents/Resources/main.js"),
-    );
+  symbolicLinkTest(
+    "does not propose JavaScript analysis for a symlink the analyzers never follow",
+    async () => {
+      const root = await createTestTempDirectory("rea-artifact-symlink-");
+      const bundle = join(root, "Fixture.app");
+      await writeTree(bundle, {
+        "Contents/MacOS/Fixture": MACH_O_64,
+        "Contents/Info.plist": INFO_PLIST,
+      });
+      await writeTree(root, { "outside.js": "console.log('outside');\n" });
+      await mkdir(join(bundle, "Contents/Resources"));
+      await symlink(
+        join(root, "outside.js"),
+        join(bundle, "Contents/Resources/main.js"),
+      );
 
-    expect(await probeOperations(bundle)).toEqual([
-      "open_binary",
-      "inspect_plist",
-    ]);
-  });
+      expect(await probeOperations(bundle)).toEqual([
+        "open_binary",
+        "inspect_plist",
+      ]);
+    },
+  );
 });

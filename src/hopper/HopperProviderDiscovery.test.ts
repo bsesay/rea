@@ -16,7 +16,7 @@ describe("Hopper provider discovery", () => {
       reason: null,
       diagnostics: {
         launcher_path: process.execPath,
-        platform: process.platform,
+        platform: "linux",
       },
     });
 
@@ -27,7 +27,7 @@ describe("Hopper provider discovery", () => {
       reason: `Hopper launcher is missing or not executable: ${missingPath}`,
       diagnostics: {
         launcher_path: missingPath,
-        platform: process.platform,
+        platform: "linux",
       },
     });
   });
@@ -40,7 +40,7 @@ describe("Hopper provider discovery", () => {
       reason: `Hopper launcher is missing or not executable: ${directory}`,
       diagnostics: {
         launcher_path: directory,
-        platform: process.platform,
+        platform: "linux",
       },
     });
   });
@@ -79,7 +79,7 @@ describe("Hopper provider discovery", () => {
 
 const provider = (
   launcherPath: string,
-  platform: NodeJS.Platform = process.platform,
+  platform: NodeJS.Platform = "linux",
 ): HopperProvider => {
   const config = parseConfig({ HOPPER_LAUNCHER_PATH: launcherPath });
   if (!config.ok) throw config.error;

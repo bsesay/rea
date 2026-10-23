@@ -69,14 +69,16 @@ else {
       if (address === null || typeof address === "string") process.exit(65);
       const pending = `${endpointPath}.pending`;
       await writeFile(
-        pending,
+        // Match ReaGhidraBridge.java: the Windows private-directory guard
+        // prevents rename; the final newline commits the descriptor.
+        process.platform === "win32" ? endpointPath : pending,
         `${JSON.stringify({
           host: "127.0.0.1",
           port: address.port,
         })}\n`,
         { flag: "wx" },
       );
-      await rename(pending, endpointPath);
+      if (process.platform !== "win32") await rename(pending, endpointPath);
     });
   }
 }

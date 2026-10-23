@@ -595,7 +595,20 @@ function execute(
     const child = spawn(
       process.execPath,
       [runnerPath, "test", command, ...arguments_],
-      { cwd: directory, stdio: ["ignore", "pipe", "pipe"] },
+      {
+        cwd: directory,
+        // The outer test runner can export reporter flags as npm configuration.
+        // This fixture owns its nested npm settings; keep stderr checks strict.
+        env: Object.fromEntries(
+          Object.entries(process.env).filter(
+            ([name]) =>
+              !["npm_config_reporter", "npm_config_outputfile"].includes(
+                name.toLowerCase(),
+              ),
+          ),
+        ),
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
     let stdout = "";
     let stderr = "";

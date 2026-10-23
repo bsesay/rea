@@ -1,8 +1,9 @@
+import { cutterPrivateTempDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 import { createServer } from "node:net";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, writeFile } from "node:fs/promises";
+
 import { join } from "node:path";
 
 import { afterEach, expect, it } from "vitest";
@@ -148,7 +149,7 @@ const writeDescriptor = async (port: number): Promise<void> => {
 };
 
 it("preserves a live Cutter status that explicitly has no active document", async () => {
-  directory = await mkdtemp(join(tmpdir(), "rea-cutter-null-status-"));
+  directory = await cutterPrivateTempDirectory("rea-cutter-null-status-");
   server = bridgeServer(null, 2);
   await writeDescriptor(await listen(server));
 
@@ -162,7 +163,7 @@ it("preserves a live Cutter status that explicitly has no active document", asyn
 });
 
 it("preserves a null active document returned after a Cutter command", async () => {
-  directory = await mkdtemp(join(tmpdir(), "rea-cutter-null-command-"));
+  directory = await cutterPrivateTempDirectory("rea-cutter-null-command-");
   server = bridgeServer(null, 2);
   await writeDescriptor(await listen(server));
 

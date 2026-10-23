@@ -309,7 +309,7 @@ cliTest(
         mcp: {
           rea: clientRegistrationEntry(
             "opencode",
-            [resolve("scripts/rea.mjs"), "mcp"],
+            [process.execPath, resolve("scripts/rea.mjs"), "mcp"],
             env,
           ),
         },

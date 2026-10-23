@@ -121,6 +121,8 @@ describe("production stdio runtime", () => {
   // The `test:acceptance` lane runs the real entrypoint on the current host;
   // these cases state each supported host's result in the test name and body.
 
+  // This also cold-starts the full catalog; use the suite's bounded acceptance
+  // deadline, as for the catalog-only case below, rather than a separate limit.
   it("reports a missing target through MCP and structured logs", async () => {
     const { result, stderr, records } = await callCurrentDocument();
     expect(result.isError).toBe(true);
@@ -143,7 +145,7 @@ describe("production stdio runtime", () => {
     );
     expect(stderr).not.toContain("HOPPER_LOADER_ARGS_JSON");
     expect(stderr).not.toContain(fixturePath);
-  }, 15_000);
+  });
 
   it.runIf(process.platform === "darwin")(
     "returns the selected document on macOS through MCP and structured logs",

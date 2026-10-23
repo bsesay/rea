@@ -1,3 +1,4 @@
+import { parse as parseYaml } from "yaml";
 import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -106,13 +107,16 @@ describe("compiled CLI JSON input diagnostic preservation", () => {
             XDG_CACHE_HOME: root,
           },
         });
-        for (const diagnostic of [
-          "invalid_request",
-          "invalid_input",
-          input,
-          "read-failed",
-        ])
-          expect(result.stdout).toContain(diagnostic);
+        const output =
+          format === "JSON" || format === "JSONL"
+            ? JSON.parse(result.stdout.trim())
+            : parseYaml(result.stdout);
+        expect(output).toMatchObject({
+          code: "invalid_request",
+          category: "invalid_input",
+          input_path: input,
+          input_reason: "read-failed",
+        });
         expect(result.stderr).toBe("");
         expect(result.exitCode).toBe(1);
       },

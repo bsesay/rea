@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 
 import {
@@ -5,16 +6,18 @@ import {
   serveCli as serve,
 } from "./cliServeHarness.js";
 
+const missingCommand = resolve("/nonexistent/apktool");
+
 it.each([
   [
     ["inspect-apktool-client", "--json"],
-    "/nonexistent/apktool",
-    "The selected apktool launcher was not found: /nonexistent/apktool. Set REA_APKTOOL_COMMAND",
+    missingCommand,
+    `The selected apktool launcher was not found: ${missingCommand}. Set REA_APKTOOL_COMMAND`,
   ],
   [
     ["decode-android-resources", "/targets/app.apk", "--json"],
-    "/nonexistent/apktool",
-    "The selected apktool launcher was not found: /nonexistent/apktool. Set REA_APKTOOL_COMMAND",
+    missingCommand,
+    `The selected apktool launcher was not found: ${missingCommand}. Set REA_APKTOOL_COMMAND`,
   ],
   [
     ["decode-android-resources", "/targets/app.apk", "--json"],

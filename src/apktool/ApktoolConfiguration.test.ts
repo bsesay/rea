@@ -49,6 +49,28 @@ describe("resolveApktoolCommand", () => {
       resolveApktoolCommand({ [APKTOOL_COMMAND_ENV]: "bin/apktool" }),
     ).rejects.toThrow(/must be an absolute path/u);
   });
+
+  it.each(["/nonexistent/apktool", "\\nonexistent\\apktool", "C:apktool"])(
+    "rejects Windows drive-relative launcher %j before lookup",
+    async (command) => {
+      await expect(
+        resolveApktoolCommand({ [APKTOOL_COMMAND_ENV]: command }, "win32"),
+      ).rejects.toMatchObject({
+        code: "not_absolute",
+        diagnostics: { configured_command: command },
+      });
+      expect(lookup.stat).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["C:\\Tools\\apktool.exe", "C:/Tools/apktool.exe"])(
+    "preserves fully qualified Windows launcher %j",
+    async (command) => {
+      await expect(
+        resolveApktoolCommand({ [APKTOOL_COMMAND_ENV]: command }, "win32"),
+      ).resolves.toEqual({ command, commandSource: "environment" });
+    },
+  );
 });
 
 describe("parseApktoolVersionOutput", () => {

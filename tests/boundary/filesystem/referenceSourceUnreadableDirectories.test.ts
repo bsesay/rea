@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -8,6 +9,9 @@ import {
   importReferenceSource,
   readReferenceSource,
 } from "../../support/referenceSourceResourceScope.js";
+
+// A real reference import requires the reader's no-follow-open authority.
+const referenceImportTest = it.skipIf(!noFollowOpenSupported());
 
 const importTree = (root: string) =>
   importReferenceSource({
@@ -117,22 +121,28 @@ describe("reference source native unreadable directories", () => {
     },
   );
 
-  it("keeps readable and empty directories enumerated exactly once", async () => {
-    const root = await createTestTempDirectory("rea-source-readable-dirs-");
-    await mkdir(join(root, "src", "empty"), { recursive: true });
-    await writeFile(join(root, "src", "main.ts"), "export const value = 1;\n");
-    const imported = await importTree(root);
-    if (!imported.ok) throw new Error(imported.error.message);
-    for (const path of ["src", "src/empty"]) {
-      expect(
-        imported.value.entries.filter((entry) => entry.path === path),
-      ).toEqual([
-        expect.objectContaining({
-          kind: "directory",
-          tree_state: "enumerated",
-          limitations: [],
-        }),
-      ]);
-    }
-  });
+  referenceImportTest(
+    "keeps readable and empty directories enumerated exactly once",
+    async () => {
+      const root = await createTestTempDirectory("rea-source-readable-dirs-");
+      await mkdir(join(root, "src", "empty"), { recursive: true });
+      await writeFile(
+        join(root, "src", "main.ts"),
+        "export const value = 1;\n",
+      );
+      const imported = await importTree(root);
+      if (!imported.ok) throw new Error(imported.error.message);
+      for (const path of ["src", "src/empty"]) {
+        expect(
+          imported.value.entries.filter((entry) => entry.path === path),
+        ).toEqual([
+          expect.objectContaining({
+            kind: "directory",
+            tree_state: "enumerated",
+            limitations: [],
+          }),
+        ]);
+      }
+    },
+  );
 });

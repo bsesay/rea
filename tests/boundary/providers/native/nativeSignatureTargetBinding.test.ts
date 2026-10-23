@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -35,6 +36,8 @@ import {
   nativeMachoTargetForFile,
 } from "../../../fixtures/nativeCommands.js";
 import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 const CONTENT = "registered executable bytes";
 const fixture = async () => {
@@ -115,7 +118,12 @@ describe("native signature target identity", () => {
     expect(await readFile(path, "utf8")).toBe(CONTENT);
   });
 
-  it.each(["changed", "missing", "directory", "symlink"] as const)(
+  symbolicLinkTest.each([
+    "changed",
+    "missing",
+    "directory",
+    "symlink",
+  ] as const)(
     "rejects a %s target before commands run",
     async (replacement) => {
       const { path, target } = await fixture();
@@ -170,7 +178,7 @@ describe("native signature target identity", () => {
     },
   );
 
-  it.skipIf(process.getuid?.() === 0)(
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "preserves read permission denial before commands",
     async () => {
       const { path, target } = await fixture();
@@ -192,7 +200,7 @@ describe("native signature target identity", () => {
     },
   );
 
-  it.skipIf(process.getuid?.() === 0)(
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "preserves permission denial during final version lookup",
     async () => {
       const { directory, path, target } = await fixture();

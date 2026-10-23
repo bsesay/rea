@@ -3,6 +3,21 @@ import type { GhidraJavaObservation } from "./GhidraJavaProbe.js";
 import { err } from "../domain/result.js";
 import type { GhidraJavaProbeFailure } from "./GhidraJavaProbe.js";
 import type { GhidraInstallationHost } from "./GhidraInstallation.js";
+import { win32 } from "node:path";
+
+/** Let a simulated Linux host read test files on Windows' current drive. */
+export const ghidraProfileFixturePath = (directory: string): string => {
+  if (process.platform !== "win32" || !/^[a-z]:[\\/]/iu.test(directory))
+    return directory;
+  if (
+    win32.parse(directory).root.toLowerCase() !==
+    win32.parse(process.cwd()).root.toLowerCase()
+  )
+    throw new Error(
+      "A simulated POSIX installation must use the current Windows drive",
+    );
+  return directory.slice(2).replaceAll("\\", "/");
+};
 
 /** Simulated valid installation for profile tests; never starts Ghidra or Java. */
 export const ghidraProfileInstallationHost: GhidraInstallationHost = {

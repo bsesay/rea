@@ -68,11 +68,13 @@ it.each(["pre-aborted", "aborted-during-probe"] as const)(
   },
 );
 
+import { pythonCommand } from "../../fixtures/pythonCommand.js";
+
 const execute = promisify(execFile);
 
 it("establishes core-only debugger state before querying recorded mappings", async () => {
   await execute(
-    "python3",
+    pythonCommand,
     ["-m", "unittest", "bridge/pwndbg/test_core_context.py", "-v"],
     {
       timeout: 10_000,

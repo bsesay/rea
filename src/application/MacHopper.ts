@@ -10,7 +10,9 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { posix } from "node:path";
+
+const { dirname, join } = posix;
 import { promisify } from "node:util";
 
 import { z } from "zod";

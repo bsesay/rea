@@ -1,6 +1,8 @@
 import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { posix } from "node:path";
+
+const { join } = posix;
 
 import { execFileBoundedOutput } from "../process/ExecFileBoundedOutput.js";
 import { execFileOutput } from "../process/ExecFileOutput.js";

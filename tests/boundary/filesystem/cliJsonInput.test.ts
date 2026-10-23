@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { execFile } from "node:child_process";
 import { chmod, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -13,6 +14,8 @@ import { JSON_BYTE_ORDER_MARK_MESSAGE } from "../../../src/application/Utf8JsonI
 import { readWithoutFifoWriter } from "../../fixtures/fifoInput.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
+
 const runCli = async (arguments_: readonly string[]): Promise<unknown> => {
   let stdout = "";
   await createCli({}).serve([...arguments_, "--json"], {
@@ -26,7 +29,7 @@ const runCli = async (arguments_: readonly string[]): Promise<unknown> => {
 };
 
 describe("CLI JSON file selection", () => {
-  it("accepts a symlink to a regular JSON file", async () => {
+  symbolicLinkTest("accepts a symlink to a regular JSON file", async () => {
     const root = await createTestTempDirectory("rea-json-input-symlink-");
     const path = join(root, "input.json");
     const selected = join(root, "selected.json");

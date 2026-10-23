@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -133,7 +134,7 @@ const probeResultSchema = z.strictObject({
 describe("Hopper API facade", () => {
   it("imports without Hopper globals and gates exhaustive work during analysis", async () => {
     const { stdout } = await execute(
-      "python3",
+      pythonCommand,
       [fileURLToPath(probePath), fileURLToPath(bridgePath)],
       {
         encoding: "utf8",

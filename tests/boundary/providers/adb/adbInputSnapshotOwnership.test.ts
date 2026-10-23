@@ -100,15 +100,17 @@ const fixture = async () => {
 
 test("retains failed snapshot cleanup ownership and retries it on close", async () => {
   const f = await fixture();
-  const actualFs =
-    await vi.importActual<typeof import("node:fs/promises")>(
-      "node:fs/promises",
-    );
-  vi.mocked(rm).mockImplementationOnce(async (path, options) => {
-    if (basename(String(path)).startsWith("rea-adb-input-"))
-      throw new Error("snapshot cleanup denied");
-    return actualFs.rm(path, options);
-  });
+  const close = PrivateRuntimeRoot.prototype.close;
+  let blocked = true;
+  vi.spyOn(PrivateRuntimeRoot.prototype, "close").mockImplementation(
+    async function (this: PrivateRuntimeRoot) {
+      if (blocked && basename(this.path).startsWith("rea-adb-input-")) {
+        blocked = false;
+        throw new Error("snapshot cleanup denied");
+      }
+      await close.call(this);
+    },
+  );
 
   const result = await f.provider.execute(f.request);
   expect(result.ok).toBe(false);
@@ -166,7 +168,9 @@ test("closes retained snapshot handles before removing their runtime root", asyn
     const handle = await originalOpen(...args);
     const path = String(args[0]);
     const isSource = path === f.source;
-    const isSnapshot = path.startsWith(`${runtimePath}/`);
+    const isSnapshot = path.startsWith(
+      `${runtimePath}${process.platform === "win32" ? "\\" : "/"}`,
+    );
     if (!isSource && !isSnapshot) return handle;
     if (isSnapshot) snapshotHandleOpen = true;
     return new Proxy(handle, {
@@ -617,17 +621,18 @@ test.each([false, true])(
     const f = await fixture();
     const controller = new AbortController();
     const abortReason = new Error("caller stopped after snapshot cleanup");
-    const actualFs =
-      await vi.importActual<typeof import("node:fs/promises")>(
-        "node:fs/promises",
-      );
-    vi.mocked(rm).mockImplementationOnce(async (path, options) => {
-      if (basename(String(path)).startsWith("rea-adb-input-")) {
-        controller.abort(abortReason);
-        if (failCleanup) throw new Error("snapshot cleanup denied");
-      }
-      return actualFs.rm(path, options);
-    });
+    const close = PrivateRuntimeRoot.prototype.close;
+    let finalizing = true;
+    vi.spyOn(PrivateRuntimeRoot.prototype, "close").mockImplementation(
+      async function (this: PrivateRuntimeRoot) {
+        if (finalizing && basename(this.path).startsWith("rea-adb-input-")) {
+          finalizing = false;
+          controller.abort(abortReason);
+          if (failCleanup) throw new Error("snapshot cleanup denied");
+        }
+        await close.call(this);
+      },
+    );
 
     const result = await f.provider.execute(f.request, {
       signal: controller.signal,

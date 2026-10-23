@@ -465,6 +465,12 @@ it.each(["seed", "extension"] as const)(
       spawnProcess: spawn,
     });
     const client = new GhidraClient({
+      // Reach snapshot staging using the host's supported bridge transport,
+      // regardless of the temporary directory's Unix socket path length.
+      transport:
+        process.platform === "win32"
+          ? "authenticated-loopback-tcp"
+          : "unix-socket",
       launcher,
       targetPath,
       targetSha256: createHash("sha256")

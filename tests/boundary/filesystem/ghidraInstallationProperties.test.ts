@@ -279,7 +279,7 @@ it.each(["read", "capacity", "completed"] as const)(
 );
 
 it.each(["replace", "grow", "shrink", "disappear"] as const)(
-  "rejects metadata that changes during a descriptor read (%s)",
+  "fails closed when metadata mutation is attempted during a descriptor read (%s)",
   async (change) => {
     const root = await createTestTempDirectory(
       "rea-install-properties-replace-",
@@ -310,7 +310,11 @@ it.each(["replace", "grow", "shrink", "disappear"] as const)(
         readGhidraInstallationProperties(path, {
           resourceOwner: resources.owner,
         }),
-      ).rejects.toMatchObject({ _tag: "AnalysisArtifactChangedError", path });
+      ).rejects.toMatchObject(
+        process.platform === "win32" && change === "replace"
+          ? { _tag: "AnalysisAccessDeniedError", path: replacement }
+          : { _tag: "AnalysisArtifactChangedError", path },
+      );
     } finally {
       await resources.close();
     }

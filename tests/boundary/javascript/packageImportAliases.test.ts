@@ -458,7 +458,8 @@ describe("package import target arrays compared with Node", () => {
 describe("package import target URL normalization compared with Node", () => {
   it("normalizes targets before package-root validation and array selection", async () => {
     const root = await createTestTempDirectory("rea-package-target-url-");
-    const directory = "app space#?%λ";
+    const directory =
+      process.platform === "win32" ? "app space#%λ" : "app space#?%λ";
     const imports = {
       "#tab-escape": ["./.\t./outside.cjs", "./fallback.cjs"],
       "#newline-escape": ["./.%\n2e/outside.cjs", "./fallback.cjs"],

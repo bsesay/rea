@@ -141,7 +141,7 @@ describe("additional client configuration dialects", () => {
     if (name === "vscode" || name === "omp" || name === "pi")
       expect(registration).toMatchObject({
         type: "stdio",
-        command: "npx",
+        command: command[0],
         args: command.slice(1),
       });
     if (name === "copilot_cli")
@@ -150,7 +150,7 @@ describe("additional client configuration dialects", () => {
       expect(registration).toMatchObject({
         transport: "stdio",
         enabled: true,
-        command: "npx",
+        command: command[0],
         args: command.slice(1),
       });
 
@@ -614,7 +614,7 @@ describe("platform-aware client config paths", () => {
         supportedClients(home, platform, env).find(
           ({ name }) => name === "vscode",
         )?.configPath,
-      ).toBe(expected);
+      ).toBe(join(expected));
     },
   );
 
@@ -628,7 +628,7 @@ describe("platform-aware client config paths", () => {
       expect.objectContaining({
         name: "grok_build",
         displayName: "Grok Build",
-        configPath: "/custom/grok/config.toml",
+        configPath: join("/custom/grok/config.toml"),
         markerPath: "/custom/grok",
         format: "grok",
       }),
@@ -644,12 +644,12 @@ describe("platform-aware client config paths", () => {
       supportedClients("/home/a", "linux", {
         SAND_DATA_ROOT: "relative/sand",
       }).find(({ name }) => name === "grok_bot")?.configPath,
-    ).toBe("/home/a/.grokbot");
+    ).toBe(join("/home/a/.grokbot"));
     expect(
       supportedClients("/home/a", "darwin", {}).find(
         ({ name }) => name === "grok_build",
       )?.configPath,
-    ).toBe("/home/a/.grok/config.toml");
+    ).toBe(join("/home/a/.grok/config.toml"));
   });
 
   it("honors Copilot CLI and Devin platform configuration roots", () => {
@@ -658,12 +658,12 @@ describe("platform-aware client config paths", () => {
         COPILOT_HOME: "/custom/copilot",
         XDG_CONFIG_HOME: "/custom/config",
       }).find(({ name }) => name === "copilot_cli")?.configPath,
-    ).toBe("/custom/copilot/mcp-config.json");
+    ).toBe(join("/custom/copilot/mcp-config.json"));
     expect(
       supportedClients("C:/Users/a", "win32", {
         APPDATA: "D:/Profile/Roaming",
       }).find(({ name }) => name === "devin")?.configPath,
-    ).toBe("D:/Profile/Roaming/devin/mcp_config.json");
+    ).toBe(join("D:/Profile/Roaming/devin/mcp_config.json"));
   });
 
   it("prefers an existing OpenCode JSONC file and honors explicit harness roots", async () => {
@@ -687,15 +687,15 @@ describe("platform-aware client config paths", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: "opencode",
-          configPath: "/custom/open-code.jsonc",
+          configPath: resolve("/custom/open-code.jsonc"),
         }),
         expect.objectContaining({
           name: "claude_code",
-          configPath: "/custom/claude/.claude.json",
+          configPath: join("/custom/claude/.claude.json"),
         }),
         expect.objectContaining({
           name: "codex",
-          configPath: "/custom/codex/config.toml",
+          configPath: join("/custom/codex/config.toml"),
         }),
       ]),
     );
@@ -854,8 +854,8 @@ describe("client launcher traversal semantics", () => {
     ).toBe("foreign");
     expect(
       classifyClientRegistrationCommand(
-        [process.execPath, "/packaged/rea.mjs", "mcp"],
-        "/packaged/rea.mjs",
+        [process.execPath, resolve("/packaged/rea.mjs"), "mcp"],
+        resolve("/packaged/rea.mjs"),
       ),
     ).toBe("owned");
     expect(

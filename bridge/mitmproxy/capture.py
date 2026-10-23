@@ -10,7 +10,6 @@ import ipaddress
 import json
 import math
 import re
-import resource
 from pathlib import Path
 from urllib.parse import unquote_to_bytes
 
@@ -360,6 +359,9 @@ class OfflineCapture:
         loader.add_option("rea_request_path", str, "", "REA private offline capture request")
 
     def running(self):
+        # Only execution requires POSIX limits; record projection is portable.
+        import resource
+
         resource.setrlimit(resource.RLIMIT_AS, (768 * 1024 * 1024, 768 * 1024 * 1024))
         resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
         resource.setrlimit(resource.RLIMIT_FSIZE, (OUTPUT_BYTES, OUTPUT_BYTES))

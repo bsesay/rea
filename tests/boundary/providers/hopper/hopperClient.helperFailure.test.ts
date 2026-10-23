@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { access, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { expect, it, onTestFinished } from "vitest";
+import { expect, it as posixTest, onTestFinished } from "vitest";
 
 import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js";
 
@@ -17,6 +17,11 @@ import { HopperApplicationLauncher } from "../../../../src/hopper/BridgeLauncher
 import { HopperClient } from "../../../../src/hopper/HopperClient.js";
 import { acquireHopperTargetLease } from "../../../../src/process/HopperLease.js";
 import { HopperFixtureLauncher } from "./hopperClient.fixture.js";
+
+// Native Hopper GUI-helper disposition is a POSIX provider contract.
+const it = posixTest.skipIf(process.platform === "win32");
+
+// Hopper has a POSIX Unix-domain socket transport and no Windows provider lane.
 
 // Failure assertions keep the external document unknown. Teardown then publishes
 // this run's authenticated bridge so normal cleanup can release its runtime/lease.
@@ -119,7 +124,7 @@ it("does not equate an owned native helper exit with an external GUI exit", asyn
   });
 });
 
-it.skipIf(process.platform !== "darwin")(
+posixTest.skipIf(process.platform !== "darwin")(
   "releases the runtime and target lease after a provenance-verified Spotlight exit, then retries",
   async () => {
     const directory = await createTestTempDirectory(

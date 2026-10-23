@@ -18,7 +18,7 @@ export async function verifyPackedBridge({ tarball, packedFiles }) {
     if (!packedFiles.includes(path)) throw new Error(`package omitted ${path}`);
   }
   // Read the packed source without extracting into the caller's leased root.
-  await exec("python3", [
+  await exec(process.platform === "win32" ? "python" : "python3", [
     "-c",
     [
       "import ast, sys, tarfile",

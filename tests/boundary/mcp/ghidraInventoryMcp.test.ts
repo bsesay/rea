@@ -173,6 +173,10 @@ it("searches bytes through MCP and the socket bridge with pagination and skipped
     (options) =>
       new GhidraClient({
         ...options,
+        transport:
+          process.platform === "win32"
+            ? "authenticated-loopback-tcp"
+            : "unix-socket",
         platform: process.platform,
         startupTimeoutMs: 5000,
         launcher: {

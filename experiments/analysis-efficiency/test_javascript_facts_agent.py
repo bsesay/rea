@@ -79,7 +79,7 @@ export async function runOwnedCommand(spawn) {
   await writeFile(answer, '{}');
   return snapshot(JSON.stringify({type: 'turn.completed', usage: {input_tokens: 1}}) + '\\n', config.mode === 'nonzero' ? 7 : 0);
 }
-'''.replace('ORIGINAL_COMMAND', json.dumps(original_command)).replace('CONFIG', json.dumps(config)))
+'''.replace('ORIGINAL_COMMAND', json.dumps(original_command)).replace('CONFIG', json.dumps(config)), encoding='utf-8')
         completed = subprocess.run(
             [shutil.which('node'), str(HARNESS), '--repository', str(repository),
              '--artifact', str(root / 'unread.asar'), '--arm', 'view', '--task', 'direct',
@@ -124,7 +124,7 @@ export async function runOwnedCommand(spawn) {
         self.assertTrue(failure['collection_failure'])
         self.assertTrue(failure['stdout_truncated'])
         self.assertTrue(failure['diagnostic_truncated'])
-        self.assertEqual((output / 'partial-events.jsonl').read_text(), 'partial-é\n')
+        self.assertEqual((output / 'partial-events.jsonl').read_text(encoding='utf-8'), 'partial-é\n')
 
     def test_failure_recording_error_preserves_primary_and_owned_workspace(self):
         result, _, workspace, _ = self.run_harness('recording-failure')
@@ -152,7 +152,7 @@ export async function runOwnedCommand(spawn) {
         self.assertFalse(failure['cleanup_owner_retained'])
         self.assertEqual(failure['phase'], 'agent-trial')
         self.assertEqual(failure['cli_version'], 'codex-cli 0.999.0')
-        self.assertEqual((output / 'partial-events.jsonl').read_text(), 'partial-é\n')
+        self.assertEqual((output / 'partial-events.jsonl').read_text(encoding='utf-8'), 'partial-é\n')
 
     def test_nonzero_command_remains_an_incomplete_trial_after_cleanup(self):
         result, output, workspace, _ = self.run_harness('nonzero')

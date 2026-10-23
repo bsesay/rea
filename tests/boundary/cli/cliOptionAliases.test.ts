@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { Cli } from "incur";
 import { describe, expect, it } from "vitest";
 
@@ -66,12 +67,14 @@ describe("CLI option aliases", () => {
     const cli = createCli({});
     const result = await serve(cli, [
       "inspect-plist",
-      "/nonexistent/REA.app",
+      resolve("/nonexistent/REA.app"),
       "--relative-path",
       "Contents/Info.plist",
       "--json",
     ]);
     expect(result.stdout).not.toContain("Unknown flag");
-    expect(result.stdout).toContain("/nonexistent/REA.app");
+    expect(result.stdout).toContain(
+      JSON.stringify(resolve("/nonexistent/REA.app")).slice(1, -1),
+    );
   });
 });

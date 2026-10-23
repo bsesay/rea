@@ -2,7 +2,7 @@ import { open, readFile, type FileHandle } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-import { afterEach, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   readbackFailed: false,
@@ -17,6 +17,7 @@ const state = vi.hoisted(() => ({
   rejectStageRemoval: false,
   beforeFirstPublication: undefined as (() => Promise<void>) | undefined,
   afterPublication: undefined as ((path: string) => Promise<void>) | undefined,
+  makeReadbackFailure: undefined as (() => Promise<unknown>) | undefined,
   rejectRestore: false,
   removeCopiedRecovery: false,
   afterBackupCopy: undefined as
@@ -37,6 +38,7 @@ afterEach(() => {
   state.rejectStageRemoval = false;
   state.afterPublication = undefined;
   state.beforeFirstPublication = undefined;
+  state.makeReadbackFailure = undefined;
   state.rejectRestore = false;
   state.removeCopiedRecovery = false;
   state.afterBackupCopy = undefined;
@@ -131,11 +133,13 @@ vi.mock("../../src/application/RegularFileRead.js", async (importOriginal) => {
     ) =>
       state.initialCleanupFailure !== undefined
         ? Promise.reject(state.initialCleanupFailure)
-        : state.readbackFailed && state.readbackCleanupFailure !== undefined
-          ? Promise.reject(state.readbackCleanupFailure)
-          : state.readbackFailed && state.failReadback
-            ? Promise.reject(new Error("injected readback failure"))
-            : original.readRegularFileText(...arguments_),
+        : state.readbackFailed && state.makeReadbackFailure !== undefined
+          ? state.makeReadbackFailure().then((cause) => Promise.reject(cause))
+          : state.readbackFailed && state.readbackCleanupFailure !== undefined
+            ? Promise.reject(state.readbackCleanupFailure)
+            : state.readbackFailed && state.failReadback
+              ? Promise.reject(new Error("injected readback failure"))
+              : original.readRegularFileText(...arguments_),
   };
 });
 
@@ -149,11 +153,59 @@ import { systemUninstallHost } from "../../src/application/Uninstall.js";
 import { ConfigurationError } from "../../src/domain/configurationErrors.js";
 import { createTestTempDirectory } from "../fixtures/temporaryDirectory.js";
 import { createDeferred } from "../fixtures/binarySession.js";
+import { symbolicLinksAvailable } from "../fixtures/symbolicLinks.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 const ownReadHandle = async (path: string) => {
   const owner = new OwnedFileHandle(await open(path, "r"));
   onTestFinished(() => owner.close());
   return owner;
+};
+
+/** Inject a real readback owner only after publication has replaced the old file. */
+const injectReadbackCloseFailure = (path: string) => {
+  let owner: OwnedFileHandle | undefined;
+  let rejectClose = true;
+  state.makeReadbackFailure = async () => {
+    if (owner !== undefined) throw new Error("Readback owner already acquired");
+    owner = await ownReadHandle(path);
+    const close = owner.handle.close.bind(owner.handle);
+    owner.handle.close = async () => {
+      if (rejectClose) throw new Error("injected readback close failure");
+      await close();
+    };
+    return new RegularFileCleanupFailure(
+      path,
+      owner,
+      { kind: "completed", value: "" },
+      new Error("injected readback close failure"),
+    );
+  };
+  return {
+    get owner() {
+      if (owner === undefined)
+        throw new Error("Readback owner was not acquired");
+      return owner;
+    },
+    allowClose() {
+      rejectClose = false;
+    },
+    async close() {
+      rejectClose = false;
+      await owner?.close();
+    },
+  };
+};
+
+/** Windows cannot rename over a destination held open by the publication owner. */
+const replacePublishedFile = async (source: string, destination: string) => {
+  const fs =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  if (process.platform === "win32") await fs.unlink(destination);
+  await fs.rename(source, destination);
 };
 
 it("reports a failed config rollback and retains its backup path", async () => {
@@ -326,14 +378,18 @@ it("retains readback cleanup ownership when rollback also fails", async () => {
   await import("node:fs/promises").then(({ writeFile }) =>
     writeFile(path, original),
   );
-  const owner = await ownReadHandle(path);
-  const cleanupFailure = new RegularFileCleanupFailure(
-    path,
-    owner,
-    { kind: "completed", value: "" },
-    new Error("injected readback close failure"),
-  );
-  state.readbackCleanupFailure = cleanupFailure;
+  let owner: OwnedFileHandle | undefined;
+  // A readback descriptor is acquired after the replacement, as in production.
+  // Opening the original before the write prevents Windows' atomic rename.
+  state.makeReadbackFailure = async () => {
+    owner = await ownReadHandle(path);
+    return new RegularFileCleanupFailure(
+      path,
+      owner,
+      { kind: "completed", value: "" },
+      new Error("injected readback close failure"),
+    );
+  };
   state.rejectRestore = true;
 
   const host = systemSetupHost(
@@ -368,7 +424,7 @@ it("retains readback cleanup ownership when rollback also fails", async () => {
   expect(await readFile(`${path}.rea.backup`, "utf8")).toBe(original);
 });
 
-it.each(["existing", "first-run"] as const)(
+symbolicLinkTest.each(["existing", "first-run"] as const)(
   "retains a replacement symlink and its target when %s readback fails",
   async (kind) => {
     const root = await createTestTempDirectory("rea-config-replaced-rollback-");
@@ -414,7 +470,7 @@ it("retains a replacement regular file when readback fails", async () => {
   await fs.writeFile(path, original);
   await fs.writeFile(replacement, foreign);
   state.afterPublication = (publishedPath) =>
-    fs.rename(replacement, publishedPath);
+    replacePublishedFile(replacement, publishedPath);
 
   const result = await configureClientConfiguration(
     { name: "cursor", configPath: path, format: "json" },
@@ -435,19 +491,7 @@ it("retains and retries both readback and publication descriptors after mixed cl
       "node:fs/promises",
     );
   await fs.writeFile(path, '{"keep":true}\n');
-  const readOwner = await ownReadHandle(path);
-  const closeRead = readOwner.handle.close.bind(readOwner.handle);
-  let rejectReadClose = true;
-  readOwner.handle.close = async () => {
-    if (rejectReadClose) throw new Error("injected readback close failure");
-    await closeRead();
-  };
-  state.readbackCleanupFailure = new RegularFileCleanupFailure(
-    path,
-    readOwner,
-    { kind: "completed", value: "" },
-    new Error("injected readback close failure"),
-  );
+  const readback = injectReadbackCloseFailure(path);
   state.rejectPublicationClose = true;
   const host = systemSetupHost(
     { platform: "linux", homeDirectory: root } as DoctorHost,
@@ -462,18 +506,18 @@ it("retains and retries both readback and publication descriptors after mixed cl
       ),
     ).rejects.toBeInstanceOf(ConfigurationError);
     expect(state.publicationHandles).toHaveLength(1);
-    expect(readOwner.handle.fd).toBeGreaterThanOrEqual(0);
+    expect(readback.owner.handle.fd).toBeGreaterThanOrEqual(0);
     expect(state.publicationHandles[0]!.fd).toBeGreaterThanOrEqual(0);
-    rejectReadClose = false;
+    readback.allowClose();
     state.rejectPublicationClose = false;
     expect(await host.close?.()).toBeUndefined();
-    expect(readOwner.handle.fd).toBe(-1);
+    expect(readback.owner.handle.fd).toBe(-1);
     expect(state.publicationHandles[0]!.fd).toBe(-1);
   } finally {
-    rejectReadClose = false;
+    readback.allowClose();
     state.rejectPublicationClose = false;
     await host.close?.();
-    await readOwner.close();
+    await readback.close();
     for (const handle of state.publicationHandles)
       if (handle.fd >= 0) await handle.close();
   }
@@ -494,7 +538,7 @@ it("rejects a replaced publication even when the replacement passes registration
   state.afterPublication = async (publishedPath) => {
     foreign = await fs.readFile(publishedPath, "utf8");
     await fs.writeFile(replacement, foreign);
-    await fs.rename(replacement, publishedPath);
+    await replacePublishedFile(replacement, publishedPath);
   };
   expect(
     await configureClientConfiguration(
@@ -576,9 +620,10 @@ it("does not adopt a descriptor named by an opaque publication close rejection",
   }
 });
 
-it.each(["symlink", "regular", "valid-readback"] as const)(
+it.for(["symlink", "regular", "valid-readback"] as const)(
   "uninstall retains a %s replacement instead of restoring through its name",
-  async (kind) => {
+  async (kind, { skip }) => {
+    if (kind === "symlink" && !symbolicLinksAvailable) skip();
     const root = await createTestTempDirectory(
       "rea-uninstall-replaced-rollback-",
     );
@@ -599,7 +644,7 @@ it.each(["symlink", "regular", "valid-readback"] as const)(
       if (kind === "symlink") {
         await fs.unlink(publishedPath);
         await fs.symlink(replacement, publishedPath);
-      } else await fs.rename(replacement, publishedPath);
+      } else await replacePublishedFile(replacement, publishedPath);
     };
     const host = systemUninstallHost(root);
     try {
@@ -633,19 +678,7 @@ it("uninstall retains both readback and publication owners until cleanup retry",
     path,
     '{"mcpServers":{"rea":{"command":"rea","args":["mcp"]}}}\n',
   );
-  const readOwner = await ownReadHandle(path);
-  const closeRead = readOwner.handle.close.bind(readOwner.handle);
-  let rejectReadClose = true;
-  readOwner.handle.close = async () => {
-    if (rejectReadClose) throw new Error("injected readback close failure");
-    await closeRead();
-  };
-  state.readbackCleanupFailure = new RegularFileCleanupFailure(
-    path,
-    readOwner,
-    { kind: "completed", value: "" },
-    new Error("readback close failed"),
-  );
+  const readback = injectReadbackCloseFailure(path);
   state.rejectPublicationClose = true;
   const host = systemUninstallHost(root);
   try {
@@ -656,18 +689,18 @@ it("uninstall retains both readback and publication owners until cleanup retry",
     });
     expect(result.status).toBe("failed");
     expect(state.publicationHandles).toHaveLength(1);
-    expect(readOwner.handle.fd).toBeGreaterThanOrEqual(0);
+    expect(readback.owner.handle.fd).toBeGreaterThanOrEqual(0);
     expect(state.publicationHandles[0]!.fd).toBeGreaterThanOrEqual(0);
-    rejectReadClose = false;
+    readback.allowClose();
     state.rejectPublicationClose = false;
     expect(await host.close?.()).toBeUndefined();
-    expect(readOwner.handle.fd).toBe(-1);
+    expect(readback.owner.handle.fd).toBe(-1);
     expect(state.publicationHandles[0]!.fd).toBe(-1);
   } finally {
-    rejectReadClose = false;
+    readback.allowClose();
     state.rejectPublicationClose = false;
     await host.close?.();
-    await readOwner.close();
+    await readback.close();
     for (const handle of state.publicationHandles)
       if (handle.fd >= 0) await handle.close();
   }
@@ -1020,7 +1053,7 @@ it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
   },
 );
 
-it.each(["setup", "uninstall"] as const)(
+symbolicLinkTest.each(["setup", "uninstall"] as const)(
   "%s refuses a configuration symlink inserted after backup without overwriting its target",
   async (operation) => {
     const root = await createTestTempDirectory(
@@ -1279,88 +1312,102 @@ it("first-run publication exclusively refuses a destination created after its fi
   ).toEqual([]);
 });
 
-it("publication keeps its selected canonical parent when a directory symlink is retargeted", async () => {
-  const root = await createTestTempDirectory("rea-config-parent-selection-");
-  const fs =
-    await vi.importActual<typeof import("node:fs/promises")>(
-      "node:fs/promises",
-    );
-  const selected = join(root, "selected");
-  const foreign = join(root, "foreign");
-  const alias = join(root, "alias");
-  await fs.mkdir(selected);
-  await fs.mkdir(foreign);
-  await fs.symlink(selected, alias, "dir");
-  const original = '{"original":true}\n';
-  const unrelated = '{"foreign":true}\n';
-  await fs.writeFile(join(selected, "client.json"), original);
-  await fs.writeFile(join(foreign, "client.json"), unrelated);
-  state.beforePublicationOpen = async () => {
-    state.beforePublicationOpen = undefined;
-    await fs.unlink(alias);
-    await fs.symlink(foreign, alias, "dir");
-  };
-  const publication = await ClientConfigurationPublication.write(
-    join(alias, "client.json"),
-    "{}",
-    original,
-  );
-  await publication.verify(() => publication.assertCurrent());
-  expect(await fs.readFile(join(selected, "client.json"), "utf8")).toBe("{}");
-  expect(await fs.readFile(join(foreign, "client.json"), "utf8")).toBe(
-    unrelated,
-  );
-  expect(
-    (await fs.readdir(selected)).filter((name) =>
-      name.startsWith(".rea-config-"),
-    ),
-  ).toEqual([]);
-});
-
-it.each(["setup", "uninstall"] as const)(
-  "%s reads back the selected canonical parent after its alias is retargeted",
-  async (operation) => {
-    const root = await createTestTempDirectory(
-      "rea-config-adapter-parent-selection-",
-    );
-    const fs =
-      await vi.importActual<typeof import("node:fs/promises")>(
-        "node:fs/promises",
+describe.each([
+  { type: "dir", available: symbolicLinksAvailable },
+  { type: "junction", available: process.platform === "win32" },
+] as const)("canonical parent via $type", ({ type, available }) => {
+  it.skipIf(!available)(
+    "publication keeps its selected canonical parent when a directory symlink is retargeted",
+    async () => {
+      const root = await createTestTempDirectory(
+        "rea-config-parent-selection-",
       );
-    const selected = join(root, "selected");
-    const foreign = join(root, "foreign");
-    const alias = join(root, "alias");
-    await fs.mkdir(selected);
-    await fs.mkdir(foreign);
-    await fs.symlink(selected, alias, "dir");
-    const original =
-      '{"mcpServers":{"rea":{"command":"rea","args":["mcp"]}},"keep":true}\n';
-    const unrelated = '{"foreign":true}\n';
-    await fs.writeFile(join(selected, "client.json"), original);
-    await fs.writeFile(join(foreign, "client.json"), unrelated);
-    state.failReadback = false;
-    state.beforePublicationOpen = async () => {
-      state.beforePublicationOpen = undefined;
-      await fs.unlink(alias);
-      await fs.symlink(foreign, alias, "dir");
-    };
-    expect(
-      (
-        await runConfigurationChange(
-          operation,
-          root,
-          join(alias, "client.json"),
-        )
-      ).status,
-    ).toBe(operation === "setup" ? "configured" : "removed");
-    expect(
-      JSON.parse(await fs.readFile(join(selected, "client.json"), "utf8")),
-    ).toMatchObject({ keep: true });
-    expect(await fs.readFile(join(foreign, "client.json"), "utf8")).toBe(
-      unrelated,
-    );
-    expect(
-      await fs.readFile(join(selected, "client.json.rea.backup"), "utf8"),
-    ).toBe(original);
-  },
-);
+      const fs =
+        await vi.importActual<typeof import("node:fs/promises")>(
+          "node:fs/promises",
+        );
+      const selected = join(root, "selected");
+      const foreign = join(root, "foreign");
+      const alias = join(root, "alias");
+      await fs.mkdir(selected);
+      await fs.mkdir(foreign);
+      await fs.symlink(selected, alias, type);
+      const original = '{"original":true}\n';
+      const unrelated = '{"foreign":true}\n';
+      await fs.writeFile(join(selected, "client.json"), original);
+      await fs.writeFile(join(foreign, "client.json"), unrelated);
+      state.beforePublicationOpen = async () => {
+        state.beforePublicationOpen = undefined;
+        if (type === "junction") await fs.rmdir(alias);
+        else await fs.unlink(alias);
+        await fs.symlink(foreign, alias, type);
+      };
+      const publication = await ClientConfigurationPublication.write(
+        join(alias, "client.json"),
+        "{}",
+        original,
+      );
+      await publication.verify(() => publication.assertCurrent());
+      expect(await fs.readFile(join(selected, "client.json"), "utf8")).toBe(
+        "{}",
+      );
+      expect(await fs.readFile(join(foreign, "client.json"), "utf8")).toBe(
+        unrelated,
+      );
+      expect(
+        (await fs.readdir(selected)).filter((name) =>
+          name.startsWith(".rea-config-"),
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it.skipIf(!available).each(["setup", "uninstall"] as const)(
+    "%s reads back the selected canonical parent after its alias is retargeted",
+    async (operation) => {
+      const root = await createTestTempDirectory(
+        "rea-config-adapter-parent-selection-",
+      );
+      const fs =
+        await vi.importActual<typeof import("node:fs/promises")>(
+          "node:fs/promises",
+        );
+      const selected = join(root, "selected");
+      const foreign = join(root, "foreign");
+      const alias = join(root, "alias");
+      await fs.mkdir(selected);
+      await fs.mkdir(foreign);
+      await fs.symlink(selected, alias, type);
+      const original =
+        '{"mcpServers":{"rea":{"command":"rea","args":["mcp"]}},"keep":true}\n';
+      const unrelated = '{"foreign":true}\n';
+      await fs.writeFile(join(selected, "client.json"), original);
+      await fs.writeFile(join(foreign, "client.json"), unrelated);
+      state.failReadback = false;
+      state.beforePublicationOpen = async () => {
+        state.beforePublicationOpen = undefined;
+        if (type === "junction") await fs.rmdir(alias);
+        else await fs.unlink(alias);
+        await fs.symlink(foreign, alias, type);
+      };
+      expect(
+        (
+          await runConfigurationChange(
+            operation,
+            root,
+            join(alias, "client.json"),
+          )
+        ).status,
+      ).toBe(operation === "setup" ? "configured" : "removed");
+      expect(
+        JSON.parse(await fs.readFile(join(selected, "client.json"), "utf8")),
+      ).toMatchObject({ keep: true });
+      expect(await fs.readFile(join(foreign, "client.json"), "utf8")).toBe(
+        unrelated,
+      );
+      expect(
+        await fs.readFile(join(selected, "client.json.rea.backup"), "utf8"),
+      ).toBe(original);
+    },
+  );
+});

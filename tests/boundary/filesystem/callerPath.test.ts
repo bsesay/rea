@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { absoluteCallerPath } from "../../../src/filesystem/callerPath.js";
 
@@ -27,9 +27,14 @@ it("removes only POSIX spellings that cannot change the named file", () => {
 });
 
 it("makes a relative POSIX cwd absolute before appending the path", () => {
-  expect(
-    absoluteCallerPath("sample", { cwd: "fixtures/../x", platform: "linux" }),
-  ).toBe(`${process.cwd()}/fixtures/../x/sample`);
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue("/work");
+  try {
+    expect(
+      absoluteCallerPath("sample", { cwd: "fixtures/../x", platform: "linux" }),
+    ).toBe("/work/fixtures/../x/sample");
+  } finally {
+    cwd.mockRestore();
+  }
 });
 
 it("uses lexical resolution on Windows, where it is exact", () => {
@@ -49,4 +54,15 @@ it("normalizes separator spellings of absolute Windows paths (#4707)", () => {
     "C://Users//u//h.exe",
   ])
     expect(absoluteCallerPath(spelling, win32)).toBe("C:\\Users\\u\\h.exe");
+});
+
+it("rejects a foreign ambient cwd instead of recursively resolving it", () => {
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue("C:\\work");
+  try {
+    expect(() =>
+      absoluteCallerPath("sample", { cwd: "fixtures", platform: "linux" }),
+    ).toThrow("absolute POSIX ambient directory");
+  } finally {
+    cwd.mockRestore();
+  }
 });

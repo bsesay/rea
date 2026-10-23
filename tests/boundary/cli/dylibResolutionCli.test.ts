@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
@@ -18,6 +19,8 @@ import { dylibResolutionResultSchema } from "../../../src/domain/apple/dylibReso
 import { parseEvidence } from "../../../src/domain/evidence.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { cliTest, type TestCli } from "../../support/cli/cliFixture.js";
+
+const symbolicLinkCliTest = cliTest.skipIf(!symbolicLinksAvailable);
 
 const ENVIRONMENT = { REA_LOG_LEVEL: "silent", REA_ANALYSIS_PROVIDER: "auto" };
 
@@ -207,7 +210,7 @@ describe("trace-dylib-resolution CLI", () => {
     ).toBe(true);
   });
 
-  cliTest(
+  symbolicLinkCliTest(
     "narrows roots and architecture, and rejects escaping roots",
     async ({ cli }) => {
       const app = await fixtureApp();

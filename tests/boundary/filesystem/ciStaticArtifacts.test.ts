@@ -1,3 +1,4 @@
+import { ZipWriter, Uint8ArrayWriter, Uint8ArrayReader } from "@zip.js/zip.js";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -71,17 +72,18 @@ it.each([3.5, 100, 0])(
       }),
     );
     const archive = join(root, "reports.zip");
-    await execute(
-      "zip",
-      [
-        "-q",
-        archive,
-        "oxlint.json",
-        "jscpd/jscpd-report.json",
-        "static-task-context.json",
-      ],
-      { cwd: reports },
-    );
+    const writer = new ZipWriter(new Uint8ArrayWriter());
+    for (const name of [
+      "oxlint.json",
+      "jscpd/jscpd-report.json",
+      "static-task-context.json",
+    ]) {
+      await writer.add(
+        name,
+        new Uint8ArrayReader(await readFile(join(reports, name))),
+      );
+    }
+    await writeFile(archive, await writer.close());
     const evidence = await parseStaticArchive(archive);
     expect(evidence.diagnostics.filter(({ kind }) => kind === "lint")).toEqual([
       expect.objectContaining({

@@ -1,4 +1,4 @@
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import type { Socket } from "node:net";
@@ -12,6 +12,19 @@ import { startRuntimeBrowser } from "../fixtures/webRuntime.js";
 const entrypoint = fileURLToPath(
   new URL("../../scripts/rea.mjs", import.meta.url),
 );
+const signalNodeArguments =
+  process.platform === "win32"
+    ? [
+        "--import",
+        new URL("../fixtures/cliSignalRelay.mjs", import.meta.url).href,
+      ]
+    : [];
+const cancelCli = (child: ChildProcess, signal: NodeJS.Signals): void => {
+  if (process.platform === "win32") child.send(signal);
+  else child.kill(signal);
+};
+const cancellationDelivery =
+  process.platform === "win32" ? "relayed signal" : "OS signal";
 const environment = () => ({
   ...process.env,
   REA_LOG_LEVEL: "silent",
@@ -43,12 +56,13 @@ it("runs the compiled public listener command through its default native CDP com
   expect(result.selected_node.selector).toBe("#selected");
 });
 
-it("translates SIGINT after real CLI arming into awaited instrumentation cleanup and a nonzero CLI failure", async () => {
+it(`translates SIGINT (${cancellationDelivery}) after real CLI arming into awaited instrumentation cleanup and a nonzero CLI failure`, async () => {
   const browser = await startRuntimeBrowser();
   onTestFinished(() => browser.close());
   const child = spawn(
     process.execPath,
     [
+      ...signalNodeArguments,
       entrypoint,
       "observe-web-execution",
       browser.endpoint,
@@ -57,8 +71,16 @@ it("translates SIGINT after real CLI arming into awaited instrumentation cleanup
       "30000",
       "--json",
     ],
-    { env: environment(), stdio: ["ignore", "pipe", "pipe"] },
+    {
+      env: environment(),
+      stdio:
+        process.platform === "win32"
+          ? ["ignore", "pipe", "pipe", "ipc"]
+          : ["ignore", "pipe", "pipe"],
+    },
   );
+  if (child.stdout === null || child.stderr === null)
+    throw new Error("Expected captured CLI output");
   onTestFinished(() => {
     if (child.exitCode === null && child.signalCode === null)
       child.kill("SIGKILL");
@@ -78,7 +100,7 @@ it("translates SIGINT after real CLI arming into awaited instrumentation cleanup
       stderr.includes("browser_execution")
     ) {
       armed = true;
-      child.kill("SIGINT");
+      cancelCli(child, "SIGINT");
     }
   });
   try {
@@ -227,7 +249,7 @@ const cancellationCases = cancellationCommands.flatMap((command) =>
 );
 
 it.each(cancellationCases)(
-  "$command preserves $signal status and awaited cleanup during CDP discovery",
+  `$command preserves $signal (${cancellationDelivery}) status and awaited cleanup during CDP discovery`,
   async ({ command, operation, buildArgs, signal, expectedExitCode }) => {
     const sockets = new Set<Socket>();
     const server = createServer(() => undefined);
@@ -245,12 +267,16 @@ it.each(cancellationCases)(
 
     const child = spawn(
       process.execPath,
-      [entrypoint, ...buildArgs(endpoint)],
+      [...signalNodeArguments, entrypoint, ...buildArgs(endpoint)],
       {
         env: environment(),
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio:
+          process.platform === "win32"
+            ? ["ignore", "pipe", "pipe", "ipc"]
+            : ["ignore", "pipe", "pipe"],
       },
     );
+    if (child.stdout === null) throw new Error("Expected captured CLI output");
     const closed = once(child, "close");
     let stdout = "";
     child.stdout.setEncoding("utf8");
@@ -273,7 +299,7 @@ it.each(cancellationCases)(
       } finally {
         if (contactTimeout !== undefined) clearTimeout(contactTimeout);
       }
-      child.kill(signal);
+      cancelCli(child, signal);
       const [exitCode, terminationSignal] = await closed;
       expect(terminationSignal).toBeNull();
       expect(exitCode).toBe(expectedExitCode);

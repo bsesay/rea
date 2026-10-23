@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   createAnalysisExecution,
   type AnalysisClient,
@@ -173,66 +174,69 @@ describe("detached provider and target metadata", () => {
   });
 });
 
-it("drains session calls and retires analysis after an admitted external mutation", async () => {
-  const [target] = await createBinarySessionTargets();
-  const alias = join(dirname(target), "first-alias.hop");
-  await symlink(target, alias);
-  const calls: string[] = [];
-  const clients: { closed: number; targetSha256: string }[] = [];
-  const base = createCacheProvider(calls);
-  const session = createTestBinarySession({
-    ...base,
-    createClient: (...arguments_) => {
-      const client = base.createClient(...arguments_);
-      const tracked = { closed: 0, targetSha256: arguments_[0].sha256 };
-      clients.push(tracked);
-      return {
-        ...client,
-        close: async () => {
-          tracked.closed += 1;
-          return client.close();
-        },
-      };
-    },
-  });
-  expect((await session.open(target)).ok).toBe(true);
-  expect(session.activeTarget()?.path).toBe(target);
-  const originalDigest = session.activeTarget()?.sha256;
-  const started = createDeferred<void>();
-  const release = createDeferred<void>();
+it.skipIf(!symbolicLinksAvailable)(
+  "drains session calls and retires analysis after an admitted external mutation",
+  async () => {
+    const [target] = await createBinarySessionTargets();
+    const alias = join(dirname(target), "first-alias.hop");
+    await symlink(target, alias);
+    const calls: string[] = [];
+    const clients: { closed: number; targetSha256: string }[] = [];
+    const base = createCacheProvider(calls);
+    const session = createTestBinarySession({
+      ...base,
+      createClient: (...arguments_) => {
+        const client = base.createClient(...arguments_);
+        const tracked = { closed: 0, targetSha256: arguments_[0].sha256 };
+        clients.push(tracked);
+        return {
+          ...client,
+          close: async () => {
+            tracked.closed += 1;
+            return client.close();
+          },
+        };
+      },
+    });
+    expect((await session.open(target)).ok).toBe(true);
+    expect(session.activeTarget()?.path).toBe(target);
+    const originalDigest = session.activeTarget()?.sha256;
+    const started = createDeferred<void>();
+    const release = createDeferred<void>();
 
-  const mutation = session.withAdmittedExternalMutation(
-    alias,
-    undefined,
-    async () => {
-      expect(session.activeTarget()?.path).toBe(target);
-      started.resolve();
-      await release.promise;
-      await writeFile(alias, "changed by external provider");
-      return resultOk("provider finished");
-    },
-    (_value, error) => error,
-  );
-  await started.promise;
-  const queuedAnalysis = session.execute("address_name", {});
-  expect(calls).toEqual([]);
+    const mutation = session.withAdmittedExternalMutation(
+      alias,
+      undefined,
+      async () => {
+        expect(session.activeTarget()?.path).toBe(target);
+        started.resolve();
+        await release.promise;
+        await writeFile(alias, "changed by external provider");
+        return resultOk("provider finished");
+      },
+      (_value, error) => error,
+    );
+    await started.promise;
+    const queuedAnalysis = session.execute("address_name", {});
+    expect(calls).toEqual([]);
 
-  release.resolve();
-  await expect(mutation).resolves.toMatchObject({
-    ok: true,
-    value: { ok: true, value: "provider finished" },
-  });
-  expect((await queuedAnalysis).ok).toBe(false);
-  expect(session.activeTarget()).toBeUndefined();
-  expect(calls).toEqual([]);
-  expect(clients).toHaveLength(0);
-  expect((await session.open(target)).ok).toBe(true);
-  expect((await session.execute("address_name", {})).ok).toBe(true);
-  expect(session.activeTarget()?.sha256).not.toBe(originalDigest);
-  expect(clients.at(-1)?.targetSha256).toBe(session.activeTarget()?.sha256);
-  expect(calls).toEqual(["address_name"]);
-  await session.close();
-});
+    release.resolve();
+    await expect(mutation).resolves.toMatchObject({
+      ok: true,
+      value: { ok: true, value: "provider finished" },
+    });
+    expect((await queuedAnalysis).ok).toBe(false);
+    expect(session.activeTarget()).toBeUndefined();
+    expect(calls).toEqual([]);
+    expect(clients).toHaveLength(0);
+    expect((await session.open(target)).ok).toBe(true);
+    expect((await session.execute("address_name", {})).ok).toBe(true);
+    expect(session.activeTarget()?.sha256).not.toBe(originalDigest);
+    expect(clients.at(-1)?.targetSha256).toBe(session.activeTarget()?.sha256);
+    expect(calls).toEqual(["address_name"]);
+    await session.close();
+  },
+);
 
 it("leaves analysis unbound when a command returns before its writer finishes", async () => {
   const [target] = await createBinarySessionTargets();

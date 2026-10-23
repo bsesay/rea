@@ -1,6 +1,6 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, posix } from "node:path";
 
 import { expect, it } from "vitest";
 
@@ -23,8 +23,16 @@ it.for(["Hopper Disassembler.app", "Hopper A.app"])(
   async (name, context) => {
     const home = await createTestTempDirectory("rea-hopper-selection-");
     if (installedSystemHopper(home)) context.skip();
-    const invalid = join(home, "Applications", name, "Contents/MacOS/hopper");
-    const valid = join(home, "Applications/Hopper Z.app/Contents/MacOS/hopper");
+    const invalid = posix.join(
+      home,
+      "Applications",
+      name,
+      "Contents/MacOS/hopper",
+    );
+    const valid = posix.join(
+      home,
+      "Applications/Hopper Z.app/Contents/MacOS/hopper",
+    );
     await mkdir(invalid, { recursive: true });
     await mkdir(dirname(valid), { recursive: true });
     await writeFile(valid, "#!/bin/sh\nexit 0\n", { mode: 0o700 });

@@ -157,16 +157,14 @@ const traceThroughCli = async (
   application: unknown,
   scenario: SeedScenario,
 ): Promise<Trace> => {
+  const directory = await createTestTempDirectory("rea-feature-trace-request-");
+  const requestPath = join(directory, "request.json");
+  await writeFile(
+    requestPath,
+    JSON.stringify({ application, seed: scenario.seed, direction: "both" }),
+  );
   const response = await cli.run({
-    arguments: [
-      "trace-application-feature",
-      JSON.stringify({
-        application,
-        seed: scenario.seed,
-        direction: "both",
-      }),
-      "--json",
-    ],
+    arguments: ["trace-application-feature", requestPath, "--json"],
   });
   expect(response.exitCode, `${scenario.name} via CLI`).toBe(0);
   const evidence = toolContract("trace_application_feature").outputSchema.parse(

@@ -1,5 +1,5 @@
-import { execFile } from "node:child_process";
-import { join } from "node:path";
+import { execFile, execFileSync } from "node:child_process";
+import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 /** Execute a fixture command while retaining its output and native exit status. */
@@ -31,3 +31,28 @@ export async function workflowGit(
   );
   return result.stdout.trim();
 }
+
+/** Git Bash must invoke the selected Windows Node executable, not npm's Unix placeholder. */
+export const workflowBashScript = (script: string): string => {
+  if (process.platform !== "win32") return script;
+  const node =
+    "'" + process.execPath.replaceAll("\\", "/").replaceAll("'", "'\\''") + "'";
+  return `node() { ${node} "$@"; }\n${script}`;
+};
+
+/** Select Git for Windows' Bash explicitly without shadowing native Windows tar. */
+export const workflowBashCommand =
+  process.platform === "win32"
+    ? resolve(
+        execFileSync("git", ["--exec-path"], {
+          encoding: "utf8",
+          windowsHide: true,
+        }).trim(),
+        "..",
+        "..",
+        "..",
+        "usr",
+        "bin",
+        "bash.exe",
+      )
+    : "bash";

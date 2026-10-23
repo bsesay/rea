@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -47,7 +48,7 @@ childProcess.execFile[promisify.custom] = async (command, args) => {
   else if (command === "tar" && args[0] === "-xOf" && args[2] === "package/skills/reverse-engineer-anything/SKILL.md")
     stdout = "  tool_count: " + CATALOG_IDENTITY.counts.mcp_tools + "\\n";
   else if (command === "tar" && args[0] === "-xf") stdout = "";
-  else if (command === "python3") { bridgeParsed = true; stdout = ""; }
+  else if (command === ${JSON.stringify(pythonCommand)}) { bridgeParsed = true; stdout = ""; }
   else throw new Error("Unexpected command: " + command + " " + JSON.stringify(args));
   return { stdout, stderr: "" };
 };

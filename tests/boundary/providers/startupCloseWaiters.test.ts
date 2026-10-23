@@ -21,6 +21,10 @@ const providers = [
     create() {
       const fixture = new GhidraFixtureLauncher();
       const client = new GhidraClient({
+        transport:
+          process.platform === "win32"
+            ? "authenticated-loopback-tcp"
+            : "unix-socket",
         launcher: fixture,
         targetPath: ghidraFixturePath,
         targetSha256: createHash("sha256")
@@ -55,9 +59,11 @@ const providers = [
   },
 ];
 
-it.each(providers)(
+it.for(providers)(
   "cancels a $name restart wait without taking ownership of pending close",
-  async ({ create, cancelled }) => {
+  async ({ name, create, cancelled }, context) => {
+    if (process.platform === "win32" && name === "Hopper")
+      context.skip("Hopper requires Unix-domain sockets");
     const { client, roots, children } = create();
     const entered = createDeferred<void>();
     const gate = createDeferred<void>();

@@ -3,10 +3,15 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { expect, it } from "vitest";
+import { expect, it as test } from "vitest";
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
+
+const it = test.skipIf(!noFollowOpenSupported());
 
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { importReferenceSource } from "../../support/referenceSourceResourceScope.js";
+
+// A real reference import requires the reader's no-follow-open authority.
 
 it("resolves require calls by lexical binding and source mode", async () => {
   const root = await createTestTempDirectory("rea-reference-require-scope-");

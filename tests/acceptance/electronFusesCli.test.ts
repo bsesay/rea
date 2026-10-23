@@ -305,7 +305,10 @@ cliTest(
     );
     await mkdir(join(binary, ".."), { recursive: true });
     await writeFile(binary, image.bytes);
-    await symlink("A", join(binary, "..", "..", "Current"));
+    // Exercise the A-version fallback on Windows without requiring symlink
+    // privileges or substituting an absolute junction (which is rejected).
+    if (process.platform !== "win32")
+      await symlink("A", join(binary, "..", "..", "Current"));
     for (const { input, cwd, selected } of [
       { input: app, cwd: root, selected: app },
       { input: `${app}/./`, cwd: root, selected: `${app}/./` },

@@ -1,5 +1,8 @@
 import {
-  chmod,
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import {
   cp,
   mkdir,
   readFile,
@@ -7,14 +10,14 @@ import {
   rename,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, matchesGlob } from "node:path";
+import { delimiter, dirname, join, matchesGlob } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { parse } from "yaml";
 import { z } from "zod";
 
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { createCutterTestDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 import {
   createTestWorkspace,
   removeTestWorkspace,
@@ -68,7 +71,7 @@ async function fixture() {
   const initial = seed;
   if (initial === undefined)
     throw new Error("CI scope seed was not initialized");
-  const directory = await createTestTempDirectory("rea-ci-scope-");
+  const directory = await createCutterTestDirectory("rea-ci-scope-");
   // Copy the pristine object database, refs and index; each case owns its mutations.
   await cp(initial.directory, directory, { recursive: true });
   return { directory, base: initial.base };
@@ -426,8 +429,11 @@ it("selects only a trusted successful ancestor from recent CI push runs", async 
   const bin = join(directory, "fake-bin");
   await mkdir(bin);
   const gh = join(bin, "gh");
-  await writeFile(gh, '#!/bin/sh\ncat "$GH_FIXTURE_RESPONSE"\n');
-  await chmod(gh, 0o755);
+  await writeFile(
+    gh,
+    '#!/usr/bin/env node\nprocess.stdout.write(require("node:fs").readFileSync(process.env.GH_FIXTURE_RESPONSE,"utf8"));\n',
+  );
+  await installNodeExecutable(gh, "commonjs");
   const response = join(directory, "runs.json");
   await writeFile(
     response,
@@ -462,7 +468,8 @@ it("selects only a trusted successful ancestor from recent CI push runs", async 
       cwd: directory,
       env: {
         ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${bin}${delimiter}${process.env.PATH}`,
+        NODE_OPTIONS: nodeFixturePreload,
         GH_FIXTURE_RESPONSE: response,
         CI_REPOSITORY: "owner/repo",
         CI_DEFAULT_BRANCH: "main",
@@ -482,8 +489,8 @@ it("returns an empty baseline when GitHub lookup fails", async ({ skip }) => {
   const bin = join(directory, "fake-bin");
   await mkdir(bin);
   const gh = join(bin, "gh");
-  await writeFile(gh, "#!/bin/sh\nexit 1\n");
-  await chmod(gh, 0o755);
+  await writeFile(gh, "#!/usr/bin/env node\nprocess.exit(1);\n");
+  await installNodeExecutable(gh, "commonjs");
   const result = await execFileAsync(
     process.execPath,
     [
@@ -495,7 +502,8 @@ it("returns an empty baseline when GitHub lookup fails", async ({ skip }) => {
       cwd: directory,
       env: {
         ...process.env,
-        PATH: `${bin}:${process.env.PATH}`,
+        PATH: `${bin}${delimiter}${process.env.PATH}`,
+        NODE_OPTIONS: nodeFixturePreload,
         CI_REPOSITORY: "owner/repo",
         CI_DEFAULT_BRANCH: "main",
         HEAD_SHA: head,

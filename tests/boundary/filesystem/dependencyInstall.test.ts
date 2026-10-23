@@ -190,6 +190,14 @@ const createBuildCacheFixture = async (): Promise<string> => {
   )
     throw new Error("package is missing its cached build command");
   const paths = [
+    ...(process.platform === "win32"
+      ? [
+          "src/windows/WindowsOwnedProcess.ts",
+          "src/windows/WindowsNativeLoader.ts",
+          "native/windows/build/manifest.json",
+          "native/windows/build/rea-windows-x64.node",
+        ]
+      : []),
     ".nvmrc",
     "package-lock.json",
     "turbo.json",

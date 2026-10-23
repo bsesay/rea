@@ -1,4 +1,6 @@
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { spawnNodeProviderProcess } from "../../fixtures/nodeProviderProcess.js";
+import { stopOwnedDebuggerProcess } from "../../../src/process/ownedDebuggerSession.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -49,6 +51,9 @@ process.stdin.on("data", (chunk) => {
     const manager = new GdbSessionManager({
       platform: "linux",
       environment: { REA_GDB_COMMAND: provider },
+      spawnProcess: spawnNodeProviderProcess,
+      stopProcess: (session, name) =>
+        stopOwnedDebuggerProcess(session, name, { platform: "linux" }),
     });
     managers.push(manager);
 
@@ -95,6 +100,9 @@ process.stdin.on("data", (chunk) => {
     const manager = new GdbSessionManager({
       platform: "linux",
       environment: { REA_GDB_COMMAND: provider },
+      spawnProcess: spawnNodeProviderProcess,
+      stopProcess: (session, name) =>
+        stopOwnedDebuggerProcess(session, name, { platform: "linux" }),
     });
     managers.push(manager);
 

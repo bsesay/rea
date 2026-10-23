@@ -74,6 +74,7 @@ const expectNativeModuleControls = async (root: string): Promise<void> => {
     process.execPath,
     [
       compiler,
+      "--ignoreConfig",
       "--module",
       "NodeNext",
       "--moduleResolution",

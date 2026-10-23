@@ -16,7 +16,10 @@ import {
   ghidraProfileLanguageOverride,
 } from "./GhidraAnalysisProfile.js";
 import { GhidraProvider } from "./GhidraProvider.js";
-import { ghidraProfileInstallationHost as host } from "./GhidraInstallation.fixture.js";
+import {
+  ghidraProfileInstallationHost as host,
+  ghidraProfileFixturePath,
+} from "./GhidraInstallation.fixture.js";
 
 // Abbreviated from Ghidra 12.1.4 Processors/PowerPC/data/languages/ppc.ldefs.
 const PPC_LDEFS = `<?xml version="1.0" encoding="UTF-8"?>
@@ -85,7 +88,7 @@ describe("bounded Ghidra PowerPC admission", () => {
     await writeFile(join(languages, "ppc.ldefs"), PPC_LDEFS);
     const ghidra = new GhidraProvider(
       configFor({
-        GHIDRA_INSTALL_DIR: installDir,
+        GHIDRA_INSTALL_DIR: ghidraProfileFixturePath(installDir),
         REA_GHIDRA_LANGUAGE_ID: "PowerPC:BE:32:e500",
       }),
       silentLogger,

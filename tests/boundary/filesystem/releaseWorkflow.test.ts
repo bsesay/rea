@@ -1,3 +1,4 @@
+import { workflowBashCommand } from "../../support/workflowGit.js";
 import { execFile } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
@@ -249,7 +250,7 @@ it.skipIf(process.platform === "win32").each([
     );
     await expect(
       execFileAsync(
-        "bash",
+        workflowBashCommand,
         ["-e", "-o", "pipefail", "-c", commands.join("\n")],
         {
           env: {
@@ -386,7 +387,7 @@ it.skipIf(process.platform === "win32").each([
         )?.run,
       );
     const result = execFileAsync(
-      "bash",
+      workflowBashCommand,
       ["-e", "-o", "pipefail", "-c", command],
       {
         env: {
@@ -422,14 +423,18 @@ it
         )?.run,
       );
     await expect(
-      execFileAsync("bash", ["-e", "-o", "pipefail", "-c", command], {
-        env: {
-          ...process.env,
-          GITHUB_REF: "refs/heads/main",
-          RELEASE_BRANCH: releaseBranch,
-          RELEASE_PHASE: "prepare",
+      execFileAsync(
+        workflowBashCommand,
+        ["-e", "-o", "pipefail", "-c", command],
+        {
+          env: {
+            ...process.env,
+            GITHUB_REF: "refs/heads/main",
+            RELEASE_BRANCH: releaseBranch,
+            RELEASE_PHASE: "prepare",
+          },
         },
-      }),
+      ),
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringMatching(/release_branch/u),
@@ -453,14 +458,18 @@ it.skipIf(process.platform === "win32").each([
         )?.run,
       );
     await expect(
-      execFileAsync("bash", ["-e", "-o", "pipefail", "-c", command], {
-        env: {
-          ...process.env,
-          GITHUB_REF: ref,
-          RELEASE_BRANCH: "release/5.0.0",
-          RELEASE_PHASE: phase,
+      execFileAsync(
+        workflowBashCommand,
+        ["-e", "-o", "pipefail", "-c", command],
+        {
+          env: {
+            ...process.env,
+            GITHUB_REF: ref,
+            RELEASE_BRANCH: "release/5.0.0",
+            RELEASE_PHASE: phase,
+          },
         },
-      }),
+      ),
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining(`Run ${phase} from`),
@@ -490,14 +499,18 @@ it.skipIf(process.platform === "win32")(
     expect(resolve).toContain("gh api");
     for (const releaseBranch of ["release/5.0.0", "release/5.0.0-rc.1"]) {
       await expect(
-        execFileAsync("bash", ["-e", "-o", "pipefail", "-c", validate], {
-          env: {
-            ...process.env,
-            GITHUB_REF: "refs/heads/main",
-            RELEASE_BRANCH: releaseBranch,
-            RELEASE_PHASE: "prepare",
+        execFileAsync(
+          workflowBashCommand,
+          ["-e", "-o", "pipefail", "-c", validate],
+          {
+            env: {
+              ...process.env,
+              GITHUB_REF: "refs/heads/main",
+              RELEASE_BRANCH: releaseBranch,
+              RELEASE_PHASE: "prepare",
+            },
           },
-        }),
+        ),
       ).resolves.toMatchObject({ stderr: "" });
     }
   },
@@ -517,14 +530,18 @@ it
         )?.run,
       );
     await expect(
-      execFileAsync("bash", ["-e", "-o", "pipefail", "-c", command], {
-        env: {
-          ...process.env,
-          GITHUB_REF: "refs/heads/main",
-          RELEASE_BRANCH: "release/5.0.0",
-          RELEASE_PHASE: phase,
+      execFileAsync(
+        workflowBashCommand,
+        ["-e", "-o", "pipefail", "-c", command],
+        {
+          env: {
+            ...process.env,
+            GITHUB_REF: "refs/heads/main",
+            RELEASE_BRANCH: "release/5.0.0",
+            RELEASE_PHASE: phase,
+          },
         },
-      }),
+      ),
     ).rejects.toMatchObject({
       code: 1,
       stderr: expect.stringContaining("phase must be prepare or publish"),
@@ -546,7 +563,7 @@ it.skipIf(process.platform === "win32").each([true, false])(
         )?.run,
       );
     const result = execFileAsync(
-      "bash",
+      workflowBashCommand,
       ["-e", "-o", "pipefail", "-c", command],
       {
         env: {
@@ -584,7 +601,7 @@ it.skipIf(process.platform === "win32").each([true, false])(
         )?.run,
       );
     const result = execFileAsync(
-      "bash",
+      workflowBashCommand,
       ["-e", "-o", "pipefail", "-c", command],
       {
         env: {

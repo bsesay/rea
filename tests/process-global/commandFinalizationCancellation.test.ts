@@ -1,4 +1,5 @@
 import { Cli } from "incur";
+import { resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { WasmArtifactService } from "../../src/application/wasm/WasmArtifactService.js";
@@ -52,7 +53,7 @@ it.each([
 ] as const)(
   "finishes the registered WASM command through final close: %s",
   async (scenario) => {
-    const value = wasmArtifactFixture();
+    const value = wasmArtifactFixture(resolve("/artifacts/module.wasm"));
     const primary = new AnalysisOutputError(
       "inspect_wasm_artifact",
       "primary reply failure",

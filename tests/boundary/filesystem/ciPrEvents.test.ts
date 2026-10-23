@@ -1,3 +1,7 @@
+import {
+  workflowBashCommand,
+  workflowBashScript,
+} from "../../support/workflowGit.js";
 import { readFile } from "node:fs/promises";
 import { expect, it } from "vitest";
 import { parse } from "yaml";
@@ -65,16 +69,24 @@ it("refreshes title validation on edits without checking out PR code or cancelli
     "docs: literal $(exit 91) `exit 92` text",
   ]) {
     await expect(
-      executeWorkflowFixture("bash", ["-c", command], {
-        env: { ...process.env, PR_TITLE: title },
-      }),
+      executeWorkflowFixture(
+        workflowBashCommand,
+        ["-c", workflowBashScript(command)],
+        {
+          env: { ...process.env, PR_TITLE: title },
+        },
+      ),
     ).resolves.toMatchObject({ stderr: "" });
   }
   for (const title of ["", "Fix CI", "feat: "]) {
     await expect(
-      executeWorkflowFixture("bash", ["-c", command], {
-        env: { ...process.env, PR_TITLE: title },
-      }),
+      executeWorkflowFixture(
+        workflowBashCommand,
+        ["-c", workflowBashScript(command)],
+        {
+          env: { ...process.env, PR_TITLE: title },
+        },
+      ),
     ).rejects.toMatchObject({ code: 1 });
   }
   expect((await workflow("ci.yml")).jobs["pr-title"]).toBeUndefined();

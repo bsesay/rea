@@ -1,5 +1,9 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { expect, it } from "vitest";
@@ -72,23 +76,22 @@ async function admissionFixture(
   const gh = join(bin, "gh");
   await writeFile(
     gh,
-    [
-      "#!/bin/sh",
-      'if [ "$GH_API_ERROR" = "true" ]; then exit 1; fi',
-      'case "$*" in',
-      '  *actions/artifacts*) cat "$GH_FIXTURE_RESPONSE" ;;',
-      "  *actions/runs/7*) node -e 'const x=require(process.env.GH_FIXTURE_RESPONSE); process.stdout.write(JSON.stringify(x.run))' ;;",
-      "  *) exit 2 ;;",
-      "esac",
-      "",
-    ].join("\n"),
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+if (process.env.GH_API_ERROR === "true") process.exit(1);
+const raw = fs.readFileSync(process.env.GH_FIXTURE_RESPONSE, "utf8");
+if (process.argv.some(x => x.includes("actions/artifacts"))) process.stdout.write(raw);
+else if (process.argv.some(x => x.includes("actions/runs/7"))) process.stdout.write(JSON.stringify(JSON.parse(raw).run));
+else process.exit(2);
+`,
   );
-  await chmod(gh, 0o755);
+  await installNodeExecutable(gh, "commonjs");
   const output = join(directory, "github-output");
   await writeFile(output, "");
   const env = {
     ...process.env,
-    PATH: `${bin}:${process.env.PATH ?? ""}`,
+    PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+    NODE_OPTIONS: nodeFixturePreload,
     GH_FIXTURE_RESPONSE: fixturePath,
     GH_API_ERROR: String(options.apiError ?? false),
     CI_REPOSITORY: repository,

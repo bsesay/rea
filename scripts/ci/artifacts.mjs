@@ -212,11 +212,18 @@ export async function readStaticCheckArtifact({
 
 /** Accept only the three named producer outputs; no archive paths are written to disk. */
 export async function parseStaticArchive(archivePath) {
-  const { stdout: listing } = await execute("unzip", ["-Z1", archivePath], {
-    encoding: "utf8",
-    maxBuffer: 128 * 1024,
-    timeout: 5_000,
-  });
+  // Windows ships bsdtar with ZIP support; no external unzip installation is needed.
+  const windows = process.platform === "win32";
+  const command = windows ? "tar" : "unzip";
+  const { stdout: listing } = await execute(
+    command,
+    [windows ? "-tf" : "-Z1", archivePath],
+    {
+      encoding: "utf8",
+      maxBuffer: 128 * 1024,
+      timeout: 5_000,
+    },
+  );
   const allowed = new Set([
     "oxlint.json",
     "jscpd/jscpd-report.json",
@@ -229,11 +236,15 @@ export async function parseStaticArchive(archivePath) {
     if (!allowed.has(member)) continue;
     if (members.has(member))
       throw new Error("static artifact contains duplicate report members");
-    const { stdout } = await execute("unzip", ["-p", archivePath, name], {
-      encoding: "buffer",
-      maxBuffer: MAX_MEMBER_BYTES,
-      timeout: 5_000,
-    });
+    const { stdout } = await execute(
+      command,
+      [windows ? "-xOf" : "-p", archivePath, name],
+      {
+        encoding: "buffer",
+        maxBuffer: MAX_MEMBER_BYTES,
+        timeout: 5_000,
+      },
+    );
     members.set(member, JSON.parse(stdout.toString("utf8")));
   }
   const context = parseStaticTaskContext(

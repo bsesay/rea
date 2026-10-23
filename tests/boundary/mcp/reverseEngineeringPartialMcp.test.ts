@@ -1,6 +1,7 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import pino from "pino";
-import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { rm, symlink, writeFile } from "node:fs/promises";
+
 import { dirname, join } from "node:path";
 import { expect, it, vi } from "vitest";
 
@@ -230,7 +231,7 @@ it("preserves the Rizin operation error when analysis retirement also fails", as
   });
 });
 
-it.each(["success", "timeout"])(
+it.skipIf(!symbolicLinksAvailable).each(["success", "timeout"])(
   "retains %s output and requires reopening after a symlink command",
   async (outcome) => {
     const [target] = await createBinarySessionTargets();

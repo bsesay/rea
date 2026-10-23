@@ -16,6 +16,9 @@ import { LINUX_PRIVATE_DISPLAY_DIAGNOSTIC_PREFIX } from "../../../../src/hopper/
 
 import { HopperFixtureLauncher as FixtureLauncher } from "./hopperClient.fixture.js";
 
+// Hopper has a POSIX Unix-domain socket transport and no Windows provider lane.
+const unixSocketTest = it.skipIf(process.platform === "win32");
+
 class SilentLauncher implements BridgeLauncher {
   launch() {
     return Promise.resolve(
@@ -237,94 +240,113 @@ describe("HopperClient startup deadline", () => {
 });
 
 describe("HopperClient startup failures", () => {
-  it("cancels bridge startup without waiting for the startup timeout", async () => {
-    const launcher = new CancelThenFixtureLauncher();
-    const client = new HopperClient({
-      launcher,
-      // Keep the retry proof independent from scheduler pressure when the
-      // complete boundary project is starting several child-process fixtures.
-      startupTimeoutMs: 30_000,
-    });
-    clients.push(client);
-    const controller = new AbortController();
-    const pending = client.callTool("echo", {}, { signal: controller.signal });
-    // Cancel after launch: a timer can fire during runtime-directory creation,
-    // leaving the silent first launch to be consumed by the retry instead.
-    const firstProcess = await launcher.firstLaunch;
-    controller.abort();
-    const result = await pending;
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error._tag).toBe("HopperCancelledError");
-    expect(
-      firstProcess.exitCode !== null || firstProcess.signalCode !== null,
-    ).toBe(true);
-    const restarted = await client.start();
-    const retriedProcess = launcher.retriedProcess;
-    expect(retriedProcess).toBeDefined();
-    expect(retriedProcess).not.toBe(firstProcess);
-    expect(restarted).toEqual({
-      ok: true,
-      value: {
-        name: "REA Hopper bridge",
-        version: "1.0.0",
-        processId: retriedProcess?.pid,
-      },
-    });
-    await expect(
-      client.callTool("echo", { value: "retried" }),
-    ).resolves.toEqual({
-      ok: true,
-      value: { value: "retried" },
-    });
-  });
+  unixSocketTest(
+    "cancels bridge startup without waiting for the startup timeout",
+    async () => {
+      const launcher = new CancelThenFixtureLauncher();
+      const client = new HopperClient({
+        launcher,
+        // Keep the retry proof independent from scheduler pressure when the
+        // complete boundary project is starting several child-process fixtures.
+        startupTimeoutMs: 30_000,
+      });
+      clients.push(client);
+      const controller = new AbortController();
+      const pending = client.callTool(
+        "echo",
+        {},
+        { signal: controller.signal },
+      );
+      // Cancel after launch: a timer can fire during runtime-directory creation,
+      // leaving the silent first launch to be consumed by the retry instead.
+      const firstProcess = await launcher.firstLaunch;
+      controller.abort();
+      const result = await pending;
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error._tag).toBe("HopperCancelledError");
+      expect(
+        firstProcess.exitCode !== null || firstProcess.signalCode !== null,
+      ).toBe(true);
+      const restarted = await client.start();
+      const retriedProcess = launcher.retriedProcess;
+      expect(retriedProcess).toBeDefined();
+      expect(retriedProcess).not.toBe(firstProcess);
+      expect(restarted).toEqual({
+        ok: true,
+        value: {
+          name: "REA Hopper bridge",
+          version: "1.0.0",
+          processId: retriedProcess?.pid,
+        },
+      });
+      await expect(
+        client.callTool("echo", { value: "retried" }),
+      ).resolves.toEqual({
+        ok: true,
+        value: { value: "retried" },
+      });
+    },
+  );
 
-  it("retries after cancellation before the launcher starts", async () => {
-    const launcher = new FixtureLauncher();
-    const client = new HopperClient({ launcher, startupTimeoutMs: 30_000 });
-    clients.push(client);
-    const controller = new AbortController();
+  unixSocketTest(
+    "retries after cancellation before the launcher starts",
+    async () => {
+      const launcher = new FixtureLauncher();
+      const client = new HopperClient({ launcher, startupTimeoutMs: 30_000 });
+      clients.push(client);
+      const controller = new AbortController();
 
-    const pending = client.callTool("echo", {}, { signal: controller.signal });
-    controller.abort();
+      const pending = client.callTool(
+        "echo",
+        {},
+        { signal: controller.signal },
+      );
+      controller.abort();
 
-    await expect(pending).resolves.toMatchObject({
-      ok: false,
-      error: { _tag: "HopperCancelledError" },
-    });
-    expect(launcher.processes).toHaveLength(0);
-    const started = await client.start();
-    expect(launcher.processes).toHaveLength(1);
-    expect(started).toEqual({
-      ok: true,
-      value: {
-        name: "REA Hopper bridge",
-        version: "1.0.0",
-        processId: launcher.processes[0]?.pid,
-      },
-    });
-    await expect(
-      client.callTool("echo", { value: "retried" }),
-    ).resolves.toEqual({
-      ok: true,
-      value: { value: "retried" },
-    });
-  });
+      await expect(pending).resolves.toMatchObject({
+        ok: false,
+        error: { _tag: "HopperCancelledError" },
+      });
+      expect(launcher.processes).toHaveLength(0);
+      const started = await client.start();
+      expect(launcher.processes).toHaveLength(1);
+      expect(started).toEqual({
+        ok: true,
+        value: {
+          name: "REA Hopper bridge",
+          version: "1.0.0",
+          processId: launcher.processes[0]?.pid,
+        },
+      });
+      await expect(
+        client.callTool("echo", { value: "retried" }),
+      ).resolves.toEqual({
+        ok: true,
+        value: { value: "retried" },
+      });
+    },
+  );
 
-  it("records unknown when the health handshake is invalid", async () => {
-    const launcher = new BadHealthLauncher();
-    const client = new HopperClient({ launcher, startupTimeoutMs: 30_000 });
-    clients.push(client);
+  unixSocketTest(
+    "records unknown when the health handshake is invalid",
+    async () => {
+      const launcher = new BadHealthLauncher();
+      const client = new HopperClient({ launcher, startupTimeoutMs: 30_000 });
+      clients.push(client);
 
-    const result = await client.start();
+      const result = await client.start();
 
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error._tag).toBe("HopperProtocolError");
-    // parseHopperServerInfo failures were never recorded, so operationHealth()
-    // reported idle and the fast path kept a client whose next start stays
-    // blocked by retained resources.
-    expect(client.operationHealth()).toMatchObject({ state: "unknown" });
-  });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error._tag).toBe("HopperProtocolError");
+      // parseHopperServerInfo failures were never recorded, so operationHealth()
+      // reported idle and the fast path kept a client whose next start stays
+      // blocked by retained resources.
+      expect(client.operationHealth()).toMatchObject({ state: "unknown" });
+    },
+  );
+});
 
+describe("HopperClient startup diagnostics", () => {
   it.each([70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80])(
     "reports Linux adapter exit %i during bridge startup",
     async (exitCode) => {

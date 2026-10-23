@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { createHash } from "node:crypto";
 import { readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,25 +41,31 @@ describe("real Hopper fixture binding", () => {
     );
   });
 
-  it("rejects digest drift and artifacts escaping the manifest root", async () => {
+  it("rejects digest drift", async () => {
     const manifest = await fixtureManifest();
     await writeFile(join(root ?? "", "c"), "changed");
     await expect(loadRealHopperFixtureTargets(manifest)).rejects.toThrow(
       /digest/u,
     );
-
-    const outside = await createTestTempDirectory("rea-hopper-outside-");
-    try {
-      await writeFile(join(outside, "c"), "primary");
-      await rm(join(root ?? "", "c"));
-      await symlink(join(outside, "c"), join(root ?? "", "c"));
-      await expect(loadRealHopperFixtureTargets(manifest)).rejects.toThrow(
-        /escapes/u,
-      );
-    } finally {
-      await rm(outside, { recursive: true, force: true });
-    }
   });
+
+  it.skipIf(!symbolicLinksAvailable)(
+    "rejects artifacts escaping the manifest root",
+    async () => {
+      const manifest = await fixtureManifest();
+      const outside = await createTestTempDirectory("rea-hopper-outside-");
+      try {
+        await writeFile(join(outside, "c"), "primary");
+        await rm(join(root ?? "", "c"));
+        await symlink(join(outside, "c"), join(root ?? "", "c"));
+        await expect(loadRealHopperFixtureTargets(manifest)).rejects.toThrow(
+          /escapes/u,
+        );
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("rejects manifest entries that alias the same artifact", async () => {
     const manifest = await fixtureManifest();

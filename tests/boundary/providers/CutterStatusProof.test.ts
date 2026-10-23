@@ -3,14 +3,16 @@ import {
   authenticatedServer,
   writeDescriptor,
 } from "../../fixtures/cutterBridgeProtocol.js";
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { createCutterTestDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 import { CutterBridgeClient } from "../../../src/cutter/CutterBridgeClient.js";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
 
 it.each(["invalid-identity", "exact-receipt", "unrelated-receipt"] as const)(
   "checks command completion independently of preflight watermark admission: %s",
   async (mode) => {
-    const directory = await createTestTempDirectory("rea-cutter-status-proof-");
+    const directory = await createCutterTestDirectory(
+      "rea-cutter-status-proof-",
+    );
     const sessionId = "27d3e3f1-f1e5-49ae-91ec-95af1f343a5a";
     const requestId = "4b18ce4d-bf31-456e-ae31-e8c547b2f9db";
     const otherId = "ede4bbfd-6348-46aa-963b-0de0e78ccbdc";

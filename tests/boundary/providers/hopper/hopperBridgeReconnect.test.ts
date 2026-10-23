@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -12,7 +13,7 @@ it.skipIf(process.platform === "win32")(
   async () => {
     const runtime = await PrivateRuntimeRoot.create({ parent: "/tmp" });
     onTestFinished(() => runtime.close());
-    const { stdout } = await execute("python3", [
+    const { stdout } = await execute(pythonCommand, [
       fileURLToPath(
         new URL(
           "../../../fixtures/hopperBridgeReconnectProbe.py",

@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   access,
   chmod,
@@ -32,6 +33,8 @@ import {
 } from "../../../src/application/Uninstall.js";
 import { clearClientLocationEnvironment } from "../../fixtures/clientEnvironment.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 /** The Windows registration setup writes, independent of the test host. */
 const command = npxRegistrationCommand("win32");
@@ -497,38 +500,42 @@ describe("MSIX Claude Desktop uninstall", () => {
     expect(await readJson(appDataConfig)).toEqual(unrelated);
   });
 
-  it("blocks managed skill removal through redirected AppData before any removal", async () => {
-    const { home, env, appDataConfig, privateConfig } = await windowsProfile();
-    await writeJson(join(dirname(privateConfig), "Preferences"), {});
-    await mkdir(dirname(dirname(appDataConfig)), { recursive: true });
-    await symlink(dirname(privateConfig), dirname(appDataConfig), "dir");
-    const agents = join(env.APPDATA, "dsh", "agents");
-    const manifest = join(
-      agents,
-      "skills",
-      "reverse-engineer-anything",
-      "SKILL.md",
-    );
-    await mkdir(dirname(manifest), { recursive: true });
-    await writeFile(
-      manifest,
-      "---\nname: reverse-engineer-anything\n---\nmanaged fixture\n",
-    );
-    const environment = { ...env, DSH_AGENTS_HOME: agents };
-    const result = await runUninstall(
-      false,
-      systemUninstallHost(home, undefined, environment, "win32"),
-    );
-    expect(result.status).toBe("failed");
-    expect(result.items).toContainEqual(
-      expect.objectContaining({
-        name: "skill",
-        status: "failed",
-        detail: expect.stringContaining("redirects its writes"),
-      }),
-    );
-    expect(await readFile(manifest, "utf8")).toContain("managed fixture");
-  });
+  symbolicLinkTest(
+    "blocks managed skill removal through redirected AppData before any removal",
+    async () => {
+      const { home, env, appDataConfig, privateConfig } =
+        await windowsProfile();
+      await writeJson(join(dirname(privateConfig), "Preferences"), {});
+      await mkdir(dirname(dirname(appDataConfig)), { recursive: true });
+      await symlink(dirname(privateConfig), dirname(appDataConfig), "dir");
+      const agents = join(env.APPDATA, "dsh", "agents");
+      const manifest = join(
+        agents,
+        "skills",
+        "reverse-engineer-anything",
+        "SKILL.md",
+      );
+      await mkdir(dirname(manifest), { recursive: true });
+      await writeFile(
+        manifest,
+        "---\nname: reverse-engineer-anything\n---\nmanaged fixture\n",
+      );
+      const environment = { ...env, DSH_AGENTS_HOME: agents };
+      const result = await runUninstall(
+        false,
+        systemUninstallHost(home, undefined, environment, "win32"),
+      );
+      expect(result.status).toBe("failed");
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "skill",
+          status: "failed",
+          detail: expect.stringContaining("redirects its writes"),
+        }),
+      );
+      expect(await readFile(manifest, "utf8")).toContain("managed fixture");
+    },
+  );
 
   it("removes REA from both the private copy and AppData on uninstall", async () => {
     const { home, env, appDataConfig, privateConfig } = await windowsProfile();

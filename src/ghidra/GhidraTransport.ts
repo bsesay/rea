@@ -94,8 +94,26 @@ export const observeGhidraEndpoint = async (
         return { path: endpoint.path };
       }
       if (process.platform === "win32") {
-        const encoded = readWindowsPrivateRuntimeFile(endpoint.path);
+        let encoded: string;
+        try {
+          encoded = readWindowsPrivateRuntimeFile(
+            endpoint.path,
+            MAX_TCP_ENDPOINT_BYTES,
+          );
+        } catch (cause: unknown) {
+          if (cause instanceof RangeError)
+            throw endpointFailure(
+              endpoint,
+              "Ghidra TCP endpoint is invalid",
+              cause,
+            );
+          throw cause;
+        }
         assertArtifactReadActive(options.signal);
+        // CREATE_NEW makes the Windows name visible before the write ends.
+        // The bridge's final newline commits the compact endpoint record;
+        // incomplete publication remains pending under the startup deadline.
+        if (!encoded.endsWith("\n")) return null;
         return parseTcpEndpoint(endpoint, encoded);
       }
       return withArtifactRegularFile(

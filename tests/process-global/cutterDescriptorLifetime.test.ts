@@ -1,8 +1,11 @@
+// These fault injections exercise Node POSIX descriptor closes. Windows reads through one native call.
 import { execFile } from "node:child_process";
 import { writeFile, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it as posixTest, vi } from "vitest";
+
+const it = posixTest.skipIf(process.platform === "win32");
 
 const fault = vi.hoisted(() => ({
   root: "",
@@ -74,7 +77,7 @@ const descriptor = async (root: string, index: number) => {
   return path;
 };
 
-it.skipIf(process.platform === "win32")(
+posixTest.skipIf(process.platform === "win32")(
   "public CLI skips a named-pipe descriptor without waiting for a writer",
   async () => {
     const root = await createTestTempDirectory("rea-cutter-fifo-");

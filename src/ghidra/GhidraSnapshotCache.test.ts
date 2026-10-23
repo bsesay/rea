@@ -179,7 +179,7 @@ describe("Ghidra relationship coverage replay", () => {
       const snapshot = initial.session.exportAnalysisSnapshot();
       if (!snapshot.ok) throw snapshot.error;
       await initial.session.close();
-      const replay = fixture();
+      const replay = fixture("12.1.4", coverage);
       expect(replay.session.importAnalysisSnapshot(snapshot.value).ok).toBe(
         true,
       );
@@ -192,7 +192,10 @@ describe("Ghidra relationship coverage replay", () => {
       expect(execution.value.relationshipCoverage ?? undefined).toEqual(
         coverage,
       );
-      expect(replay.calls).toEqual([]);
+      // Windows Ghidra must admit its source before imported cache replay.
+      expect(replay.calls).toEqual(
+        process.platform === "win32" ? ["analyze_function"] : [],
+      );
       await replay.session.close();
     },
   );
@@ -317,7 +320,9 @@ describe("Ghidra snapshot cache", () => {
       expect(imported.ok && imported.value.result).toEqual(
         first.ok && first.value.result,
       );
-      expect(replay.calls).toEqual([]);
+      expect(replay.calls).toEqual(
+        process.platform === "win32" ? [operation] : [],
+      );
       await replay.session.close();
 
       const changed = fixture("12.1.5");

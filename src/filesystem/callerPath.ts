@@ -19,6 +19,10 @@ export const absoluteCallerPath = (
 ): string => {
   if (platform === "win32") return win32.resolve(cwd, path);
   if (!posix.isAbsolute(path)) {
+    if (!posix.isAbsolute(cwd) && !posix.isAbsolute(process.cwd()))
+      throw new TypeError(
+        "Relative POSIX cwd requires an absolute POSIX ambient directory",
+      );
     const base = posix.isAbsolute(cwd)
       ? cwd
       : absoluteCallerPath(cwd, { platform });

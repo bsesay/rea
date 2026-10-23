@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { createHash } from "node:crypto";
 import {
   mkdir,
@@ -14,7 +15,7 @@ import { historicalSourceGraphSchema } from "../../../src/domain/referenceSource
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { cliTest } from "../../support/cli/cliFixture.js";
 
-cliTest(
+cliTest.skipIf(!noFollowOpenSupported())(
   "retains malformed source bytes without inventing decoded import targets",
   async ({ cli }) => {
     const root = await createTestTempDirectory("rea-reference-utf8-");

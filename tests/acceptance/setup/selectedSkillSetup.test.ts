@@ -63,17 +63,23 @@ cliTest.for(["root", "references"] as const)(
         status: "needs_human",
         code: "skill_install_failed",
         appliedActions: [],
+        remediation: expect.stringContaining(link),
       });
-      expect(result.stdout).toContain(link);
       expect(result.stdout).toContain("--skill=false");
     }
     const doctor = await run(["doctor", "--client", "claude_code", "--skill"]);
     expect(doctor.exitCode, doctor.stdout).toBe(1);
     expect(doctor.json).toMatchObject({
       healthy: false,
-      identity: { skill: { state: "unmanaged" } },
+      identity: {
+        skill: {
+          state: "unmanaged",
+          issues: expect.arrayContaining([
+            expect.objectContaining({ path: link }),
+          ]),
+        },
+      },
     });
-    expect(doctor.stdout).toContain(link);
     expect((await lstat(link)).isSymbolicLink()).toBe(true);
   },
 );

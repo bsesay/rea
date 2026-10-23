@@ -31,11 +31,11 @@ const piPath = (
 // that differs from Pi's public getAgentDir()/normalizePath boundary.
 describe("Pi user configuration paths", () => {
   it.each([
-    [undefined, "/home/a/.pi/agent"],
-    ["", "/home/a/.pi/agent"],
+    [undefined, join("/home/a/.pi/agent")],
+    ["", join("/home/a/.pi/agent")],
     ["/custom/agent", "/custom/agent"],
     ["~", "/home/a"],
-    ["~/custom/agent", "/home/a/custom/agent"],
+    ["~/custom/agent", join("/home/a/custom/agent")],
     ["agent", "agent"],
     ["./agent", "./agent"],
     [" agent ", " agent "],
@@ -151,7 +151,7 @@ describe("Pi registration semantics", () => {
         other: { command: "other-server" },
         rea: {
           type: "stdio",
-          command: "npx",
+          command: NPX_REGISTRATION_COMMAND[0],
           args: NPX_REGISTRATION_COMMAND.slice(1),
         },
       },
@@ -197,7 +197,7 @@ describe("Pi registration semantics", () => {
         JSON.stringify({
           mcpServers: {
             rea: {
-              command: "npx",
+              command: NPX_REGISTRATION_COMMAND[0],
               args: NPX_REGISTRATION_COMMAND.slice(1),
               type,
               enabled,
@@ -291,7 +291,7 @@ describe("Pi strict JSON parsing", () => {
       mcpServers: {
         rea: {
           type: "stdio",
-          command: "npx",
+          command: NPX_REGISTRATION_COMMAND[0],
           args: NPX_REGISTRATION_COMMAND.slice(1),
         },
       },

@@ -1,3 +1,7 @@
+import {
+  workflowBashCommand,
+  workflowBashScript,
+} from "../../support/workflowGit.js";
 import { execFileSync } from "node:child_process";
 import { chmod, readFile, readdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
@@ -87,18 +91,22 @@ printf '%s\n' 'C:\Users\runner with spaces\AppData\Local\npm-cache'
         outputDirectory,
         `policy-${Date.now()}-${Math.random()}`,
       );
-      execFileSync("bash", ["-euo", "pipefail", "-c", command], {
-        env: {
-          ...process.env,
-          PATH: `${outputDirectory}${delimiter}${process.env.PATH ?? ""}`,
-          GITHUB_EVENT_NAME: event,
-          GITHUB_REF: ref,
-          GITHUB_OUTPUT: outputPath,
-          DEFAULT_BRANCH: defaultBranch,
-          LOCKFILES_HASH: "lock-hash",
-          RUNNER_OS: "Windows",
+      execFileSync(
+        workflowBashCommand,
+        ["-euo", "pipefail", "-c", workflowBashScript(command)],
+        {
+          env: {
+            ...process.env,
+            PATH: `${outputDirectory}${delimiter}${process.env.PATH ?? ""}`,
+            GITHUB_EVENT_NAME: event,
+            GITHUB_REF: ref,
+            GITHUB_OUTPUT: outputPath,
+            DEFAULT_BRANCH: defaultBranch,
+            LOCKFILES_HASH: "lock-hash",
+            RUNNER_OS: "Windows",
+          },
         },
-      });
+      );
       const output = await readFile(outputPath, "utf8");
       expect(output).toContain(`can-save=${expected}\n`);
       expect(output).toContain(

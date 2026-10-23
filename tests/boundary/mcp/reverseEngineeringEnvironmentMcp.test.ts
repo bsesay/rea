@@ -1,3 +1,4 @@
+import { writeWindowsConsoleFixture } from "../../fixtures/windowsConsoleFixture.js";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,6 +9,8 @@ import { expect, it } from "vitest";
 import { createProviderEnvironmentMcpHarness } from "../../support/reverseDebuggerMcpTestHelpers.js";
 
 const writeProvider = async (path: string, output: string): Promise<void> => {
+  if (process.platform === "win32")
+    return writeWindowsConsoleFixture(path, output);
   await writeFile(
     path,
     `#!${process.execPath}\nprocess.stdout.write('${output}');\n`,

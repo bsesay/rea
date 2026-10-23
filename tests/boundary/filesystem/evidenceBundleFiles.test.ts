@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   mkdir,
   readdir,
@@ -29,6 +30,8 @@ import {
   createEvidenceBundle,
   serializeEvidenceBundle,
 } from "../../../src/domain/evidenceBundle.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 const bundle = (result = true) =>
   createEvidenceBundle([
@@ -358,23 +361,26 @@ describe("evidence bundle filesystem adapter", () => {
     });
   });
 
-  it("reads the caller-selected symlink target and refuses to replace a symlink", async () => {
-    const directory = await createTestTempDirectory("rea-evidence-");
-    const outside = join(directory, "outside");
-    await mkdir(outside);
-    const outsidePath = join(outside, "bundle.json");
-    await writeFile(outsidePath, serializeEvidenceBundle(bundle()));
-    const link = join(directory, "escaped.json");
-    await symlink(outsidePath, link);
-    expect(await readEvidenceBundle(link)).toMatchObject({
-      ok: true,
-      value: bundle(),
-    });
-    expect(await writeBundle(bundle(), link, true)).toMatchObject({
-      ok: false,
-      error: { _tag: "EvidenceFileError", reason: "not-file" },
-    });
-  });
+  symbolicLinkTest(
+    "reads the caller-selected symlink target and refuses to replace a symlink",
+    async () => {
+      const directory = await createTestTempDirectory("rea-evidence-");
+      const outside = join(directory, "outside");
+      await mkdir(outside);
+      const outsidePath = join(outside, "bundle.json");
+      await writeFile(outsidePath, serializeEvidenceBundle(bundle()));
+      const link = join(directory, "escaped.json");
+      await symlink(outsidePath, link);
+      expect(await readEvidenceBundle(link)).toMatchObject({
+        ok: true,
+        value: bundle(),
+      });
+      expect(await writeBundle(bundle(), link, true)).toMatchObject({
+        ok: false,
+        error: { _tag: "EvidenceFileError", reason: "not-file" },
+      });
+    },
+  );
 
   it("reports a missing file or output directory with the selected path", async () => {
     const directory = await createTestTempDirectory("rea-evidence-");

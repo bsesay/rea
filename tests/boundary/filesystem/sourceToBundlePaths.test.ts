@@ -1,6 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it as test } from "vitest";
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
+
+// Importing a real source tree requires the reader's no-follow-open authority.
+const it = test.skipIf(!noFollowOpenSupported());
 
 import { analyzeJavaScriptApplication } from "../../support/javascriptApplicationScope.js";
 import { parseApplicationGraphEvidence } from "../../../src/application/javascript/JavaScriptApplicationEvidenceGraph.js";
@@ -12,6 +16,8 @@ import {
 } from "../../../src/domain/javascript/javascriptSourceMapPaths.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { importReferenceSource } from "../../support/referenceSourceResourceScope.js";
+
+// A real reference import requires the reader's no-follow-open authority.
 
 it("keeps literal hash characters in historical/current filesystem paths", async () => {
   const root = await createTestTempDirectory("rea-source-path-");
@@ -657,7 +663,7 @@ it("resolves parent segments against a nested source map's directory", async () 
   );
 });
 
-it("rejects static application Evidence whose subject path disagrees with its result", async () => {
+test("rejects static application Evidence whose subject path disagrees with its result", async () => {
   const root = await createTestTempDirectory("rea-application-subject-path-");
   const analyzed = await analyzeJavaScriptApplication({ input_path: root });
   if (!analyzed.ok) throw analyzed.error;
@@ -708,7 +714,7 @@ const compareTrees = async (previous: string, current: string) => {
   return { reference: reference.value, comparison, application };
 };
 
-it.skipIf(process.platform === "win32")(
+test.skipIf(process.platform === "win32" || !noFollowOpenSupported())(
   "does not promote a POSIX literal backslash name to a different historical slash path",
   async () => {
     const root = await createTestTempDirectory("rea-backslash-source-match-");
@@ -737,7 +743,7 @@ it.skipIf(process.platform === "win32")(
   },
 );
 
-it.skipIf(process.platform === "win32").each([
+test.skipIf(process.platform === "win32" || !noFollowOpenSupported()).each([
   { mapPath: "literal\\bundle.js.map", expected: "a.js" },
   { mapPath: "literal\\dir/bundle.js.map", expected: "literal\\dir/a.js" },
 ])(
@@ -795,7 +801,7 @@ it.skipIf(process.platform === "win32").each([
   },
 );
 
-it.each([
+test.each([
   { source: "https://user%2Fname@host.test/a.js", expected: "host.test/a.js" },
   {
     source: "C:\\code\\literal%5Cname.js",

@@ -144,7 +144,7 @@ export class WindowsPrivateRuntime {
   }
 
   /** Read a private endpoint from an opened file, without re-opening its path. */
-  readFile(relativePath: string): string {
+  readFile(relativePath: string, maximumBytes: number): string {
     const file = fileSchema.parse(
       this.authority.call("runtime_open", [
         this.observation.handle,
@@ -152,6 +152,10 @@ export class WindowsPrivateRuntime {
       ]),
     );
     try {
+      if (file.size > maximumBytes)
+        throw new RangeError(
+          `Private runtime file exceeds its ${maximumBytes}-byte publication bound`,
+        );
       const chunks: Buffer[] = [];
       for (let offset = 0; offset < file.size;) {
         const value = z
@@ -240,7 +244,13 @@ export const windowsPrivateRuntime = (
 };
 
 /** Read a runtime endpoint using the lease that owns its parent directory. */
-export const readWindowsPrivateRuntimeFile = (path: string): string => {
+export const readWindowsPrivateRuntimeFile = (
+  path: string,
+  maximumBytes: number,
+): string => {
   const parent = win32.dirname(path);
-  return windowsPrivateRuntime(parent).readFile(win32.basename(path));
+  return windowsPrivateRuntime(parent).readFile(
+    win32.basename(path),
+    maximumBytes,
+  );
 };

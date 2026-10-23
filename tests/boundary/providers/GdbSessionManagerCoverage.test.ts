@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { spawnNodeProviderProcess } from "../../fixtures/nodeProviderProcess.js";
 import { spawn } from "node:child_process";
 import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -21,7 +22,14 @@ import type {
   ProviderProcessHandle,
   SpawnedOwnedProviderProcess,
 } from "../../../src/process/ProviderProcess.js";
-import { stopOwnedDebuggerProcess } from "../../../src/process/ownedDebuggerSession.js";
+import { stopOwnedDebuggerProcess as stopDebuggerProcess } from "../../../src/process/ownedDebuggerSession.js";
+
+// These controlled producers model a Linux debugger, including its detach policy.
+const stopOwnedDebuggerProcess: typeof stopDebuggerProcess = (
+  session,
+  name,
+  options,
+) => stopDebuggerProcess(session, name, { platform: "linux", ...options });
 import { parseLinuxProcessStartTime } from "../../../src/process/ProcessOwnershipObservation.js";
 import { expectGdbSessionStarted } from "./gdbTestHelpers.js";
 
@@ -1133,6 +1141,7 @@ const managerWithFakeSpawner = (
     platform: "linux",
     environment: { REA_GDB_COMMAND: "fake-gdb" },
     spawnProcess,
+    stopProcess: stopOwnedDebuggerProcess,
     verifyInferiorOutputSink: async () => undefined,
     ...options,
   });
@@ -1178,6 +1187,8 @@ const managerFor = async (
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: await createProvider(body) },
+    spawnProcess: spawnNodeProviderProcess,
+    stopProcess: stopOwnedDebuggerProcess,
     ...options,
   });
   managers.push(manager);
@@ -1243,6 +1254,8 @@ ${responsiveProvider()}
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
+    stopProcess: stopOwnedDebuggerProcess,
   });
   managers.push(manager);
 
@@ -1259,6 +1272,7 @@ it("retains ownership when GDB startup fails before its prompt and stop is incom
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
     stopProcess: async (session, name) => {
       stopCalls += 1;
       if (stopCalls === 1) {
@@ -1305,6 +1319,8 @@ it("returns startup timeout when the MI prompt never arrives", async () => {
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
+    stopProcess: stopOwnedDebuggerProcess,
     startupTimeoutMs: 20,
   });
   managers.push(manager);
@@ -1376,6 +1392,7 @@ it("retains startup timeout without partial evidence when cleanup is uncertain",
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
     startupTimeoutMs: 20,
     stopProcess: async (session, name) => {
       stopCalls += 1;
@@ -1459,6 +1476,8 @@ it("handles a start signal that becomes aborted during listener registration", a
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
+    stopProcess: stopOwnedDebuggerProcess,
   });
   managers.push(manager);
 
@@ -2364,6 +2383,7 @@ it("retains a session when closing cannot confirm the debugger process stopped",
   const manager = new GdbSessionManager({
     platform: "linux",
     environment: { REA_GDB_COMMAND: provider },
+    spawnProcess: spawnNodeProviderProcess,
     stopProcess: async (session, name) => {
       stopCalls += 1;
       if (stopCalls === 1)
@@ -2409,14 +2429,11 @@ it("retains an exited GDB session when provider stop verification is incomplete"
 
 it("preserves a command timeout when stopping the owned process rejects", async () => {
   let stopCalls = 0;
-  const provider = await createProvider(
-    responsiveProvider(`
-    if (match[2].includes('auto-load off')) process.stdout.write(match[1] + '^done\\n');
-  `),
-  );
-  const manager = new GdbSessionManager({
-    platform: "linux",
-    environment: { REA_GDB_COMMAND: provider },
+  const fake = createFakeSpawner((child, token, command) => {
+    if (command.includes("auto-load off"))
+      child.stdout.write(`${token}^done\n`);
+  });
+  const manager = managerWithFakeSpawner(fake.spawnProcess, {
     commandTimeoutMs: 25,
     stopProcess: async (session, name) => {
       stopCalls += 1;
@@ -2424,7 +2441,6 @@ it("preserves a command timeout when stopping the owned process rejects", async 
       return stopOwnedDebuggerProcess(session, name);
     },
   });
-  managers.push(manager);
   const started = await expectGdbSessionStarted(manager);
 
   const timedOut = await manager.execute(started.value.session_id, "stall");

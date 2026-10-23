@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../../tests/fixtures/symbolicLinks.js";
 import {
   chmod,
   mkdir,
@@ -40,17 +41,20 @@ it.skipIf(process.platform === "win32")(
   },
 );
 
-it("preserves the caller-selected executable symlink for process invocation", async () => {
-  const root = await mkdtemp(join(tmpdir(), "rea-process-executable-alias-"));
-  try {
-    const alias = join(root, "chosen-node");
-    await symlink(process.execPath, alias);
+it.skipIf(!symbolicLinksAvailable)(
+  "preserves the caller-selected executable symlink for process invocation",
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "rea-process-executable-alias-"));
+    try {
+      const alias = join(root, "chosen-node");
+      await symlink(process.execPath, alias);
 
-    await expect(resolveExecutable(alias, root, "")).resolves.toBe(alias);
-  } finally {
-    await rm(root, { recursive: true, force: true });
-  }
-});
+      await expect(resolveExecutable(alias, root, "")).resolves.toBe(alias);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
 
 it("resolves a Windows executable through the canonical PATH spelling", async () => {
   const root = await mkdtemp(join(tmpdir(), "rea-process-path-"));

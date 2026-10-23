@@ -1,4 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -210,7 +214,7 @@ async function createFixture(
     fakeGh,
     `#!/usr/bin/env node\nconst fs = require("node:fs");\nfs.writeFileSync(process.env.CI_GH_ARGS, JSON.stringify(process.argv.slice(2)));\nprocess.stdout.write(fs.readFileSync(process.env.CI_GH_RESPONSE, "utf8"));\nprocess.exitCode = ${String(exitCode)};\n`,
   );
-  await chmod(fakeGh, 0o755);
+  await installNodeExecutable(fakeGh, "commonjs");
   const outputDirectory = join(directory, ".cache", "ci-job-timings");
   const summary = join(directory, "summary.md");
   await writeFile(summary, "");
@@ -231,6 +235,7 @@ function runReporter(fixture: Awaited<ReturnType<typeof createFixture>>) {
     env: {
       ...process.env,
       PATH: `${fixture.fakeBin}${delimiter}${process.env.PATH ?? ""}`,
+      NODE_OPTIONS: nodeFixturePreload,
       CI_REPOSITORY: "example/rea",
       CI_JOB_TIMINGS_DIRECTORY: fixture.outputDirectory,
       CI_GH_ARGS: fixture.args,

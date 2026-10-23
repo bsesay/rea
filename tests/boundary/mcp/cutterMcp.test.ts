@@ -9,7 +9,7 @@ import {
   createTestBinarySession,
   createCacheProvider,
 } from "../../fixtures/binarySession.js";
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { createCutterTestDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 import { parseEvidence } from "../../../src/domain/evidence.js";
 import { createServer } from "../../../src/server/createServer.js";
 import { silentLogger } from "../../../src/logger.js";
@@ -196,7 +196,7 @@ const createMcpBridge = async (
 };
 
 it("preserves live Cutter command Evidence and parity through the MCP boundary", async () => {
-  const directory = await createTestTempDirectory("rea-cutter-mcp-");
+  const directory = await createCutterTestDirectory("rea-cutter-mcp-");
   if (process.platform !== "win32") await chmod(directory, 0o700);
   const sessionId = "27d3e3f1-f1e5-49ae-91ec-95af1f343a5a";
   const token = "synthetic-cutter-bridge-token-for-mcp-test";

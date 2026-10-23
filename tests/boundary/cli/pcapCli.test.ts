@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { expect, it } from "vitest";
 
 import { expectConfigurationRefusal, serveCli } from "./cliServeHarness.js";
@@ -16,12 +17,12 @@ it.each([
   ["inspect-pcap-capture", "/nonexistent/capture.pcap"],
 ])("%s names the missing Wireshark tool to configure", async (...argv) => {
   const result = await serveCli([...argv, "--json"], {
-    REA_TSHARK_COMMAND: "/nonexistent/tshark",
-    REA_CAPINFOS_COMMAND: "/nonexistent/capinfos",
+    REA_TSHARK_COMMAND: resolve("/nonexistent/tshark"),
+    REA_CAPINFOS_COMMAND: resolve("/nonexistent/capinfos"),
   });
   expectConfigurationRefusal(
     result,
-    "Cannot run selected tool /nonexistent/tshark",
+    `Cannot run selected tool ${resolve("/nonexistent/tshark")}`,
   );
   expectConfigurationRefusal(result, "through absolute REA_TSHARK_COMMAND");
 });

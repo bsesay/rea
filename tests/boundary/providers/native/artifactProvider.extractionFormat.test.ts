@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { access, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -11,39 +12,44 @@ import { artifactExtractionExecutionSchema } from "../../../../src/contracts/art
 import { artifactExtractionResultSchema } from "../../../../src/domain/artifactGraph.js";
 import type { BinaryTarget } from "../../../../src/domain/binaryTargetTypes.js";
 
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
+
 describe("artifact extraction format support", () => {
-  it("refuses unsupported formats before inventory or output", async () => {
-    const root = await createTestTempDirectory("rea-extract-format-");
-    const image = join(root, "Image.dmg");
-    await writeFile(image, "not mounted");
-    const alias = join(root, "Alias.dmg");
-    await symlink(image, alias);
-    const output = join(root, "output");
-    const extract = (signal?: AbortSignal) =>
-      new ArtifactProvider(process.env)
-        .createClient(archiveTarget(alias, "dmg"))
-        .execute(
-          "extract_artifact",
-          artifactExtractionExecutionSchema.parse({ output_root: output }),
-          signal === undefined ? undefined : { signal },
-        );
-    expect(await extract()).toMatchObject({
-      ok: false,
-      error: {
-        _tag: "AnalysisUnsupportedTargetError",
-        operation: "extract_artifact",
-        path: alias,
-        reason: "Artifact format has no extraction reader: dmg",
-      },
-    });
-    const controller = new AbortController();
-    controller.abort();
-    expect(await extract(controller.signal)).toMatchObject({
-      ok: false,
-      error: { _tag: "ArtifactOperationError", reason: "cancelled" },
-    });
-    await expect(access(output)).rejects.toThrow();
-  });
+  symbolicLinkTest(
+    "refuses unsupported formats before inventory or output",
+    async () => {
+      const root = await createTestTempDirectory("rea-extract-format-");
+      const image = join(root, "Image.dmg");
+      await writeFile(image, "not mounted");
+      const alias = join(root, "Alias.dmg");
+      await symlink(image, alias);
+      const output = join(root, "output");
+      const extract = (signal?: AbortSignal) =>
+        new ArtifactProvider(process.env)
+          .createClient(archiveTarget(alias, "dmg"))
+          .execute(
+            "extract_artifact",
+            artifactExtractionExecutionSchema.parse({ output_root: output }),
+            signal === undefined ? undefined : { signal },
+          );
+      expect(await extract()).toMatchObject({
+        ok: false,
+        error: {
+          _tag: "AnalysisUnsupportedTargetError",
+          operation: "extract_artifact",
+          path: alias,
+          reason: "Artifact format has no extraction reader: dmg",
+        },
+      });
+      const controller = new AbortController();
+      controller.abort();
+      expect(await extract(controller.signal)).toMatchObject({
+        ok: false,
+        error: { _tag: "ArtifactOperationError", reason: "cancelled" },
+      });
+      await expect(access(output)).rejects.toThrow();
+    },
+  );
 
   it.each(["zip", "hap", "hsp", "app-pack"] as const)(
     "extracts the ZIP-backed %s package family that inventory already supports",

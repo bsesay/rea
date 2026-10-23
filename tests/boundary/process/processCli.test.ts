@@ -24,7 +24,7 @@ const execFileAsync = promisify(execFile);
 const CLI_INTEGRATION_TIMEOUT_MS = 60_000;
 
 describe("documented process CLI workflow", () => {
-  cliTest(
+  cliTest.skipIf(process.platform === "win32")(
     "feeds the documented JSON capture into the comparison CLI",
     async ({ cli }) => {
       const root = await createTestTempDirectory("rea-process-cli-");
@@ -176,23 +176,26 @@ describe("process CLI evidence validation", () => {
     });
   });
 
-  it("captures the minimal executable-and-arguments scenario", async () => {
-    const root = await createTestTempDirectory("rea-process-cli-");
-    const scenario = join(root, "scenario.json");
-    await writeFile(
-      scenario,
-      JSON.stringify({
-        executable: process.execPath,
-        arguments: ["-e", "process.stdout.write('minimal-capture')"],
-      }),
-    );
-    const evidence = await captureProcessScenarioFile(scenario);
-    expect(evidence).toMatchObject({
-      predicate_type: "rea.process-capture",
-      operation: "capture_process_scenario",
-    });
-    expect(JSON.stringify(evidence)).toContain("minimal-capture");
-  });
+  it.skipIf(process.platform === "win32")(
+    "captures the minimal executable-and-arguments scenario",
+    async () => {
+      const root = await createTestTempDirectory("rea-process-cli-");
+      const scenario = join(root, "scenario.json");
+      await writeFile(
+        scenario,
+        JSON.stringify({
+          executable: process.execPath,
+          arguments: ["-e", "process.stdout.write('minimal-capture')"],
+        }),
+      );
+      const evidence = await captureProcessScenarioFile(scenario);
+      expect(evidence).toMatchObject({
+        predicate_type: "rea.process-capture",
+        operation: "capture_process_scenario",
+      });
+      expect(JSON.stringify(evidence)).toContain("minimal-capture");
+    },
+  );
 
   it("rejects unrelated capture evidence", async () => {
     const root = await createTestTempDirectory("rea-process-cli-");
@@ -298,4 +301,27 @@ it(
     });
   },
   CLI_INTEGRATION_TIMEOUT_MS,
+);
+
+it.runIf(process.platform === "win32")(
+  "reports the Windows PTY cleanup prerequisite through the public CLI",
+  async () => {
+    const root = await createTestTempDirectory("rea-process-cli-windows-");
+    const scenario = join(root, "scenario.json");
+    await writeFile(
+      scenario,
+      JSON.stringify({
+        executable: process.execPath,
+        arguments: ["-e", "process.stdout.write('unreachable')"],
+      }),
+    );
+    const result = await captureProcessScenarioFile(scenario);
+    expect(result).toMatchObject({
+      code: "capability_unavailable",
+      category: "unsupported_provider",
+      message: expect.stringContaining(
+        "does not yet verify descendant cleanup",
+      ),
+    });
+  },
 );

@@ -260,6 +260,10 @@ it("retries retained browser cleanup before the one-shot CLI releases its provid
 });
 
 it("retries a late Playwright open after cancellation before accepting another capture", async () => {
+  let firstLaunchStarted!: () => void;
+  const launchStarted = new Promise<void>((resolve) => {
+    firstLaunchStarted = resolve;
+  });
   let finishLateOpen!: (context: unknown) => void;
   const lateOpen = new Promise<unknown>((resolve) => {
     finishLateOpen = resolve;
@@ -306,6 +310,7 @@ it("retries a late Playwright open after cancellation before accepting another c
   };
   state.launchPersistentContext.mockImplementation(() => {
     launchCount += 1;
+    if (launchCount === 1) firstLaunchStarted();
     return launchCount === 1 ? lateOpen : Promise.resolve(makeContext());
   });
   const provider = new PlaywrightBrowserScenarioProvider((input, options) =>
@@ -316,7 +321,10 @@ it("retries a late Playwright open after cancellation before accepting another c
     signal: cancellation.signal,
   });
   try {
-    await vi.waitFor(() => expect(launchCount).toBe(1));
+    // Profile creation uses real filesystem work. Synchronize on launch
+    // admission rather than requiring that work to finish within one second.
+    await launchStarted;
+    expect(launchCount).toBe(1);
     cancellation.abort();
     const cancelled = await firstCapture;
     if (cancelled.ok) throw new Error("Expected the first capture to cancel.");

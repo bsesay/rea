@@ -167,18 +167,21 @@ describe("ESM module URL decoding", () => {
       ["./name%3F%23.mjs", "name?#.mjs"],
       ["./percent%2520.mjs?cache=1#v2", "percent%20.mjs"],
     ] as const;
+    const hostCases = cases.filter(
+      ([, target]) => process.platform !== "win32" || !target.includes("?"),
+    );
     const root = await createTestTempDirectory("rea-module-url-");
     const main = join(root, "main.mjs");
     await writeFile(
       main,
-      cases
+      hostCases
         .map(
           ([specifier], index) =>
             `import value${index} from ${JSON.stringify(specifier)}; console.log(value${index});`,
         )
         .join("\n"),
     );
-    for (const [specifier, target] of cases) {
+    for (const [specifier, target] of hostCases) {
       await writeFile(
         join(root, target),
         `export default ${JSON.stringify(target)};`,
@@ -191,7 +194,7 @@ describe("ESM module URL decoding", () => {
       timeout: 5_000,
     });
     expect(native.stdout.trim().split("\n")).toEqual(
-      cases.map(([, target]) => target),
+      hostCases.map(([, target]) => target),
     );
 
     const result = await analyzeJavaScriptApplication({
@@ -202,7 +205,7 @@ describe("ESM module URL decoding", () => {
     const { graph } = javascriptApplicationAnalysisResultSchema.parse(
       result.value.normalized_result,
     );
-    for (const [specifier, target] of cases) {
+    for (const [specifier, target] of hostCases) {
       const imports = graph.edges.filter(
         (edge) =>
           edge.relation === "imports" &&
@@ -245,18 +248,22 @@ describe("ESM module URL decoding", () => {
   );
 });
 
-const packageEntryUrlCases = [
-  ["exports", "./actual%20file.cjs", "actual file.cjs"],
-  ["exports", "./actual.cjs?variant", "actual.cjs"],
-  ["exports", "./actual.cjs#variant", "actual.cjs"],
-  ["exports", "./actual%23file.cjs", "actual#file.cjs"],
-  ["exports", "./actual%3Ffile.cjs", "actual?file.cjs"],
-  ["exports", "./actual%252Ffile.cjs", "actual%2Ffile.cjs"],
-  ["exports", "./actual.cjs", "actual.cjs"],
-  ["main", "./actual%20file.cjs", "actual%20file.cjs"],
-  ["main", "./actual?file.cjs", "actual?file.cjs"],
-  ["main", "./actual#file.cjs", "actual#file.cjs"],
-] as const;
+const packageEntryUrlCases = (
+  [
+    ["exports", "./actual%20file.cjs", "actual file.cjs"],
+    ["exports", "./actual.cjs?variant", "actual.cjs"],
+    ["exports", "./actual.cjs#variant", "actual.cjs"],
+    ["exports", "./actual%23file.cjs", "actual#file.cjs"],
+    ["exports", "./actual%3Ffile.cjs", "actual?file.cjs"],
+    ["exports", "./actual%252Ffile.cjs", "actual%2Ffile.cjs"],
+    ["exports", "./actual.cjs", "actual.cjs"],
+    ["main", "./actual%20file.cjs", "actual%20file.cjs"],
+    ["main", "./actual?file.cjs", "actual?file.cjs"],
+    ["main", "./actual#file.cjs", "actual#file.cjs"],
+  ] as const
+).filter(
+  ([, , target]) => process.platform !== "win32" || !target.includes("?"),
+);
 
 it.each(["import", "require"] as const)(
   "matches Node %s across package exports and main path representations",

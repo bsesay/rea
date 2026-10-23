@@ -1,5 +1,6 @@
+import { PrivateRuntimeRoot } from "../../../../src/process/PrivateRuntimeRoot.js";
 import { join } from "node:path";
-import { expect, it, vi } from "vitest";
+import { expect, it, vi, onTestFinished } from "vitest";
 import { AnalysisCancelledError } from "../../../../src/domain/analysisErrorCore.js";
 import { ProviderCleanupError } from "../../../../src/domain/providerCleanupError.js";
 import {
@@ -105,7 +106,11 @@ it("does not adopt a caller error's cleanup resources at initial cancellation", 
 });
 
 it("wraps an opaque typed caller reason at the real spawn preparation checkpoint", async () => {
-  const root = await createTestTempDirectory("rea-ghidra-preparation-cancel-");
+  const runtime = await PrivateRuntimeRoot.create({
+    prefix: "rea-ghidra-preparation-cancel-",
+  });
+  const root = runtime.path;
+  onTestFinished(() => runtime.close());
   const controller = new AbortController();
   const reason = new ProviderCleanupError("foreign", ["foreign-resource"], {
     reason: "caller-owned",

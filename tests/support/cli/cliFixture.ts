@@ -51,6 +51,19 @@ export const cliCompileCacheEnvironment = (
   ...environment,
 });
 
+/** Minimal host requirements shared by normal and preloaded CLI processes. */
+export const cliProcessEnvironment = (
+  environment: NodeJS.ProcessEnv | undefined,
+  compileCache?: string,
+): NodeJS.ProcessEnv => ({
+  PATH: process.env.PATH ?? "",
+  // Windows APIs need these even when the application environment is empty.
+  ...(process.platform === "win32"
+    ? { SystemRoot: process.env.SystemRoot, TEMP: tmpdir(), TMP: tmpdir() }
+    : {}),
+  ...cliCompileCacheEnvironment(environment, compileCache),
+});
+
 /** Create a compiled CLI driver backed by the supplied process registry. */
 export const createTestCli = (
   processes: TestProcesses,
@@ -68,19 +81,7 @@ export const createTestCli = (
       [resolve("scripts/rea.mjs"), ...arguments_],
       {
         cwd: cwd ?? process.cwd(),
-        env: {
-          PATH: process.env.PATH ?? "",
-          // Native Windows APIs need the system root and a writable temporary
-          // directory even when the command's application environment is empty.
-          ...(process.platform === "win32"
-            ? {
-                SystemRoot: process.env.SystemRoot,
-                TEMP: tmpdir(),
-                TMP: tmpdir(),
-              }
-            : {}),
-          ...cliCompileCacheEnvironment(environment, compileCache),
-        },
+        env: cliProcessEnvironment(environment, compileCache),
         ...(input === undefined ? {} : { input }),
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       },

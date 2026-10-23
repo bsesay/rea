@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { access, chmod, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  chmod,
+  readFile,
+  writeFile,
+  type FileHandle,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import { createTestTempDirectory } from "../../tests/fixtures/temporaryDirectory.js";
@@ -7,17 +13,34 @@ import { WabtArtifactProvider } from "./WabtArtifactProvider.js";
 import { wasmArtifactSchema } from "../domain/wasm/wasmArtifact.js";
 import { PrivateRuntimeRoot } from "../process/PrivateRuntimeRoot.js";
 import { PrivateRuntimeRootUnavailableError } from "../process/PrivateRuntimeRootUnavailableError.js";
-import { spawnOwnedProviderProcess } from "../process/ProviderProcess.js";
+import { spawnOwnedProviderProcess as spawnProviderProcess } from "../process/ProviderProcess.js";
 import { OwnedCommandFailure } from "../process/OwnedCommand.js";
 import { projectAnalysisError } from "../domain/analysisErrorProjection.js";
 import { WABT_LIMITS } from "./WabtRelease.js";
 import { wabtFailure } from "./WabtFailures.js";
+
+// The controlled producer is Node, whose Windows crypto initialization needs
+// SystemRoot even when the WABT caller selects an otherwise minimal environment.
+const spawnOwnedProviderProcess = (
+  input: Parameters<typeof spawnProviderProcess>[0],
+) =>
+  spawnProviderProcess({
+    ...input,
+    hostEnvironment: {
+      ...(process.platform === "win32"
+        ? { SystemRoot: process.env.SystemRoot }
+        : {}),
+      ...input.hostEnvironment,
+    },
+  });
 
 const fileCloseFailure = vi.hoisted(() => ({
   selectedPath: "",
   attempts: 0,
   failFirst: false,
   failRead: undefined as (() => Error) | undefined,
+  deniedHandle: undefined as FileHandle | undefined,
+  closes: new WeakMap<FileHandle, number>(),
 }));
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -36,8 +59,16 @@ vi.mock("node:fs/promises", async (importOriginal) => {
         });
       }
       handle.close = async () => {
+        // Node's ReadStream also calls close after the descriptor is released.
+        // Only physical open-descriptor attempts belong to the injected failure.
+        if (handle.fd < 0) return close();
         fileCloseFailure.attempts += 1;
+        fileCloseFailure.closes.set(
+          handle,
+          (fileCloseFailure.closes.get(handle) ?? 0) + 1,
+        );
         if (fileCloseFailure.failFirst) {
+          fileCloseFailure.deniedHandle = handle;
           fileCloseFailure.failFirst = false;
           throw new Error("injected WABT input close failure");
         }
@@ -205,6 +236,19 @@ const assertModeOutcome = (
         },
       },
     });
+  else if (
+    process.platform === "win32" &&
+    (mode === "snapshot-close-failure" ||
+      mode === "snapshot-read-failure-late-abort")
+  )
+    // Windows also retains the directory while its snapshot descriptor is open.
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        _tag: "ProviderAdapterError",
+        cleanupPrimary: { _tag: failureTags[mode] },
+      },
+    });
   else
     expect(result).toMatchObject({
       ok: false,
@@ -252,9 +296,13 @@ it("retries a retained input descriptor before admitting the next WABT operation
   const path = join(root, "selected.wasm");
   await writeFile(path, Buffer.alloc(76, 1));
   for (const tool of ["wasm-validate", "wasm-objdump", "wasm2wat"])
-    await writeFile(join(root, tool), "source-owned executable seam", {
-      mode: 0o700,
-    });
+    await writeFile(
+      join(root, tool + (process.platform === "win32" ? ".exe" : "")),
+      "source-owned executable seam",
+      {
+        mode: 0o700,
+      },
+    );
   const dump = await readFile(
     new URL("../../tests/fixtures/wasm/objdump.txt", import.meta.url),
     "utf8",
@@ -490,6 +538,56 @@ const glueSourcesForOutcome = (mode: OutcomeMode) => {
     : [];
 };
 
+const assertSnapshotCleanupRecovery = async (
+  mode: OutcomeMode,
+  result: Awaited<ReturnType<WabtArtifactProvider["inspect"]>>,
+  {
+    path,
+    runtimePath,
+    provider,
+  }: {
+    path: string;
+    runtimePath: string;
+    provider: WabtArtifactProvider;
+  },
+): Promise<void> => {
+  const retained = fileCloseFailure.deniedHandle;
+  try {
+    assertModeOutcome(mode, result, path);
+    if (retained === undefined)
+      throw new Error("Snapshot close was not denied");
+    expect(retained.fd).toBeGreaterThanOrEqual(0);
+    expect(fileCloseFailure.closes.get(retained)).toBe(1);
+    if (process.platform === "win32")
+      await expect(access(runtimePath)).resolves.toBeUndefined();
+    expect(result).toMatchObject({
+      error: {
+        cleanupIncomplete: true,
+        cleanupResources: [
+          join(runtimePath, "module.wasm"),
+          ...(process.platform === "win32" ? [runtimePath] : []),
+        ],
+      },
+    });
+  } finally {
+    fileCloseFailure.failFirst = false;
+    fileCloseFailure.failRead = undefined;
+    await provider.close();
+    fileCloseFailure.selectedPath = "";
+  }
+  if (retained === undefined) throw new Error("Snapshot close was not denied");
+  expect(retained.fd).toBe(-1);
+  expect(fileCloseFailure.closes.get(retained)).toBe(2);
+  expect(result).toMatchObject({
+    error: { cleanupIncomplete: false, cleanupResources: [] },
+  });
+  if (!result.ok && mode === "snapshot-read-failure-late-abort")
+    expect(result.error.cleanupPrimary ?? result.error).toMatchObject({
+      _tag: "AnalysisOutputError",
+      reason: expect.stringContaining("Authored snapshot read failure"),
+    });
+};
+
 const runOwnedArtifactOutcome = async (
   mode: OutcomeMode,
   cancellationReason: unknown = "authored finalization cancellation",
@@ -525,6 +623,7 @@ const runOwnedArtifactOutcome = async (
         fileCloseFailure.selectedPath = join(root.path, "module.wasm");
         fileCloseFailure.failFirst = true;
         fileCloseFailure.attempts = 0;
+        fileCloseFailure.deniedHandle = undefined;
         if (mode === "snapshot-read-failure-late-abort")
           fileCloseFailure.failRead = () => {
             controller.abort("late abort after physical read failure");
@@ -572,7 +671,10 @@ const runOwnedArtifactOutcome = async (
   );
   if (mode === "success" && result.ok)
     assertGlueObservations(result.value.result, glueInputs, path);
-  assertModeOutcome(mode, result, path);
+  const snapshotFailure =
+    mode === "snapshot-close-failure" ||
+    mode === "snapshot-read-failure-late-abort";
+  if (!snapshotFailure) assertModeOutcome(mode, result, path);
   if (mode === "cleanup") {
     await assertCleanupRecovery({
       provider,
@@ -607,32 +709,12 @@ const runOwnedArtifactOutcome = async (
       });
     }
   }
-  if (
-    mode === "snapshot-close-failure" ||
-    mode === "snapshot-read-failure-late-abort"
-  ) {
-    try {
-      expect(result).toMatchObject({
-        error: {
-          cleanupIncomplete: true,
-          cleanupResources: [join(runtimePath, "module.wasm")],
-        },
-      });
-    } finally {
-      fileCloseFailure.failFirst = false;
-      fileCloseFailure.failRead = undefined;
-      await provider.close();
-      fileCloseFailure.selectedPath = "";
-    }
-    expect(result).toMatchObject({
-      error: { cleanupIncomplete: false, cleanupResources: [] },
+  if (snapshotFailure)
+    await assertSnapshotCleanupRecovery(mode, result, {
+      path,
+      runtimePath,
+      provider,
     });
-    if (!result.ok && mode === "snapshot-read-failure-late-abort")
-      expect(result.error).toMatchObject({
-        _tag: "AnalysisOutputError",
-        reason: expect.stringContaining("Authored snapshot read failure"),
-      });
-  }
   await expect(access(runtimePath)).rejects.toMatchObject({ code: "ENOENT" });
   expect(await readFile(path)).toEqual(bytes);
   if (acquiredPid !== undefined) {

@@ -58,7 +58,13 @@ describe("provider process runtime and wait primitives", () => {
       parent: tmpdir(),
       prefix: "rea-provider-test-",
     });
-    expect((await stat(runtime.path)).mode & 0o077).toBe(0);
+    if (process.platform === "win32")
+      expect(
+        nativeLoader
+          .requireWindowsNativeAuthority()
+          .call("cutter_bridge_verify_directory", [runtime.path]),
+      ).toMatchObject({ privateDacl: true });
+    else expect((await stat(runtime.path)).mode & 0o077).toBe(0);
     await writeFile(join(runtime.path, "owned-scratch"), "fixture");
 
     const first = runtime.close();
@@ -477,7 +483,13 @@ describe("provider process host injection", () => {
       arguments: ["-e", "process.stdout.write(process.env.REA_HOST_TEST)"],
       runId: "injected-host-run",
       platform: "win32",
-      hostEnvironment: { PATH: process.env.PATH, REA_HOST_TEST: "host-value" },
+      hostEnvironment: {
+        PATH: process.env.PATH,
+        ...(process.platform === "win32"
+          ? { SystemRoot: process.env.SystemRoot }
+          : {}),
+        REA_HOST_TEST: "host-value",
+      },
       env: { REA_HOST_TEST: "spawn-override" },
     });
     try {
@@ -569,9 +581,13 @@ describe("provider process spawning primitives", () => {
         runId,
         leaderPid: spawned.process.pid,
         processGroupId: spawned.process.pid,
-        expectedCommand: process.execPath,
+        ...(process.platform === "win32"
+          ? {}
+          : { expectedCommand: process.execPath }),
         expectedParentPid: process.pid,
       });
+      if (process.platform === "win32")
+        expect(spawned.cleanup).toBeTypeOf("function");
       expect(spawned.process.stdout).not.toBeNull();
       expect(spawned.process.stderr).not.toBeNull();
     } finally {

@@ -1,4 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -65,26 +69,24 @@ async function invoke(
   const fakeGh = join(fakeBin, "gh");
   await writeFile(
     fakeGh,
-    [
-      "#!/bin/sh",
-      'printf \'%s\\n\' "$*" >> "$GH_API_CALLS"',
-      'if [ "$GH_API_ERROR" = "true" ]; then exit 1; fi',
-      'if [ "$4" = "repos/example/rea/actions/artifacts" ]; then',
-      '  node -e \'const fs=require("node:fs"); const x=JSON.parse(fs.readFileSync(process.env.GH_FIXTURE_RESPONSE,"utf8")); process.stdout.write(JSON.stringify({artifacts:x.artifacts}));\'',
-      "else",
-      '  run_id="${4##*/}"',
-      '  node -e \'const fs=require("node:fs"); const x=JSON.parse(fs.readFileSync(process.env.GH_FIXTURE_RESPONSE,"utf8")); process.stdout.write(JSON.stringify(x.runs[Number(process.argv[1])] ?? {}));\' "$run_id"',
-      "fi",
-      "",
-    ].join("\n"),
+    `#!/usr/bin/env node
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.GH_API_CALLS, args.join(" ") + "\\n");
+if (process.env.GH_API_ERROR === "true") process.exit(1);
+const x = JSON.parse(fs.readFileSync(process.env.GH_FIXTURE_RESPONSE, "utf8"));
+const endpoint = args[3];
+process.stdout.write(JSON.stringify(endpoint.endsWith("actions/artifacts") ? {artifacts:x.artifacts} : x.runs[Number(endpoint.split("/").at(-1))] ?? {}));
+`,
   );
-  await chmod(fakeGh, 0o755);
+  await installNodeExecutable(fakeGh, "commonjs");
   const node24 = dirname(process.execPath);
   const result = await executeWorkflowFixture(process.execPath, [script], {
     cwd: directory,
     env: {
       ...process.env,
       PATH: [fakeBin, node24, process.env.PATH ?? ""].join(delimiter),
+      NODE_OPTIONS: nodeFixturePreload,
       GH_FIXTURE_RESPONSE: fixture,
       GH_API_CALLS: calls,
       GH_API_ERROR: String(options.apiError ?? false),

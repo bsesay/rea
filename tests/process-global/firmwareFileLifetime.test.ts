@@ -441,9 +441,13 @@ it.each([null, "caller cancellation", new Error("caller cancellation")])(
   },
 );
 
-it.each(["descriptor-first", "workspace-first"])(
+it.for(["descriptor-first", "workspace-first"])(
   "keeps provider mixed-owner cleanup incomplete until both release: %s",
-  async (order) => {
+  async (order, context) => {
+    if (process.platform === "win32" && order === "workspace-first")
+      context.skip(
+        "Windows retains a directory containing an open immutable file",
+      );
     const root = await createTestTempDirectory("rea-firmware-mixed-owner-");
     const path = join(root, "input.bin");
     await writeFile(path, "firmware bytes");
@@ -724,7 +728,7 @@ it("preserves primitive cancellation before publication commit and rolls back th
   await fixture.context.files.close();
 });
 
-it.each(["caller", "deadline"])(
+it.skipIf(process.platform === "win32").each(["caller", "deadline"])(
   "preserves %s cancellation during directory sync plus failed close and rollback",
   async (kind) => {
     const controller = new AbortController();

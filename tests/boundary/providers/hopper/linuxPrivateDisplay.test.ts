@@ -238,46 +238,52 @@ describe("Linux private display selection", () => {
     });
   });
 
-  it("reports missing helper dependencies without exposing raw stderr", () => {
-    for (const [option] of [
-      ["--xauth", "missing_xauth"],
-      ["--xvfb", "missing_xvfb"],
-    ] as const) {
-      const result = spawnSync(
-        "/usr/bin/python3",
-        [helperPath, "--probe", option, "/rea/missing-executable"],
-        { encoding: "utf8" },
-      );
-      expect(result.status).toBe(79);
-      const parsed = parseLinuxPrivateDisplayDiagnostic(result.stderr);
-      expect(parsed).toMatchObject({
-        ok: true,
-        value: {
-          status: "error",
-          failure_code: "runtime_dependency_unavailable",
-        },
-      });
-      if (parsed.ok)
-        expect(parsed.value.reason).toMatch(/^missing_(xauth|xvfb)$/u);
-      expect(result.stderr).not.toContain("Traceback");
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "reports missing helper dependencies without exposing raw stderr",
+    () => {
+      for (const [option] of [
+        ["--xauth", "missing_xauth"],
+        ["--xvfb", "missing_xvfb"],
+      ] as const) {
+        const result = spawnSync(
+          "/usr/bin/python3",
+          [helperPath, "--probe", option, "/rea/missing-executable"],
+          { encoding: "utf8" },
+        );
+        expect(result.status).toBe(79);
+        const parsed = parseLinuxPrivateDisplayDiagnostic(result.stderr);
+        expect(parsed).toMatchObject({
+          ok: true,
+          value: {
+            status: "error",
+            failure_code: "runtime_dependency_unavailable",
+          },
+        });
+        if (parsed.ok)
+          expect(parsed.value.reason).toMatch(/^missing_(xauth|xvfb)$/u);
+        expect(result.stderr).not.toContain("Traceback");
+      }
+    },
+  );
 
-  it("kills the owned probe group when its absolute deadline expires", async () => {
-    const result = await selectLinuxPrivateDisplayStrategy({
-      helperPath: hangingHelperPath,
-      timeoutMs: 75,
-      runProbe: runLinuxPrivateDisplayProbe,
-    });
-    expect(result).toMatchObject({
-      ok: false,
-      diagnostic: { reason: "probe_timeout" },
-    });
-    const processes = spawnSync("/bin/ps", ["-eo", "args="], {
-      encoding: "utf8",
-    }).stdout;
-    expect(processes).not.toContain(hangingHelperPath);
-  });
+  it.skipIf(process.platform === "win32")(
+    "kills the owned probe group when its absolute deadline expires",
+    async () => {
+      const result = await selectLinuxPrivateDisplayStrategy({
+        helperPath: hangingHelperPath,
+        timeoutMs: 75,
+        runProbe: runLinuxPrivateDisplayProbe,
+      });
+      expect(result).toMatchObject({
+        ok: false,
+        diagnostic: { reason: "probe_timeout" },
+      });
+      const processes = spawnSync("/bin/ps", ["-eo", "args="], {
+        encoding: "utf8",
+      }).stdout;
+      expect(processes).not.toContain(hangingHelperPath);
+    },
+  );
 });
 
 describe("private display probe output settlement", () => {
