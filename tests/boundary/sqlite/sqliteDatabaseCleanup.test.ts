@@ -101,6 +101,12 @@ it("awaits shared shutdown cleanup and retains failures for a later close", asyn
     "rejected",
   ]);
   expect(fixture.attempts()).toBe(2);
+  for (const result of closed)
+    if (result.status === "rejected")
+      expect(result.reason).toMatchObject({
+        cleanupIncomplete: true,
+        cleanupResources: [fixture.roots[0]?.path],
+      });
   expect(await fixture.provider.inspect({ path: fixture.path })).toMatchObject({
     ok: false,
     error: { _tag: "AnalysisCancelledError" },
@@ -108,6 +114,12 @@ it("awaits shared shutdown cleanup and retains failures for a later close", asyn
   fixture.allowRemoval();
   await fixture.provider.close();
   await fixture.provider.close();
+  for (const result of closed)
+    if (result.status === "rejected")
+      expect(result.reason).toMatchObject({
+        cleanupIncomplete: false,
+        cleanupResources: [],
+      });
   expect(fixture.attempts()).toBe(3);
   for (const root of fixture.roots)
     await expect(access(root.path)).rejects.toMatchObject({ code: "ENOENT" });
@@ -172,6 +184,7 @@ it("waits for concurrent acquisitions and releases only owners whose cleanup suc
   release.resolve();
   await Promise.all(inspections);
   await rejected;
+  const aggregate = await closing.catch((cause: unknown) => cause);
   const [first, second] = roots;
   if (first === undefined || second === undefined)
     throw new Error("Missing owned roots");
@@ -181,8 +194,16 @@ it("waits for concurrent acquisitions and releases only owners whose cleanup suc
   });
   await expect(access(first.path)).rejects.toMatchObject({ code: "ENOENT" });
   await expect(access(second.path)).resolves.toBeUndefined();
+  expect(aggregate).toMatchObject({
+    cleanupIncomplete: true,
+    cleanupResources: [second.path],
+  });
   allowed.add(second);
   await provider.close();
+  expect(aggregate).toMatchObject({
+    cleanupIncomplete: false,
+    cleanupResources: [],
+  });
   await expect(access(second.path)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -194,6 +215,7 @@ it("retains the snapshot until a failed worker cleanup owner can be stopped", as
   let workerRemovalAllowed = false;
   let rootRemovalAllowed = false;
   let workerAttempts = 0;
+  let workerRunId = "";
   let rootAttempts = 0;
   const roots: PrivateRuntimeRoot[] = [];
   const supervisor = new ProviderProcessSupervisor({
@@ -210,6 +232,7 @@ it("retains the snapshot until a failed worker cleanup owner can be stopped", as
   const provider = new SqliteDatabaseProvider(
     {},
     async (spawn) => {
+      workerRunId = spawn.runId;
       const stopped = await supervisor.stop();
       if (stopped.status !== "incomplete")
         throw new Error("Expected retained worker");
@@ -246,7 +269,8 @@ it("retains the snapshot until a failed worker cleanup owner can be stopped", as
     await removeTestWorkspace(workspace.root);
   });
   await waitForProviderProcessReady(child);
-  expect(await provider.inspect({ path: database.path })).toMatchObject({
+  const inspection = await provider.inspect({ path: database.path });
+  expect(inspection).toMatchObject({
     ok: false,
     error: { cleanupIncomplete: true },
   });
@@ -254,6 +278,8 @@ it("retains the snapshot until a failed worker cleanup owner can be stopped", as
   expect(rootAttempts).toBe(0);
   const root = roots[0];
   if (root === undefined) throw new Error("Missing retained snapshot");
+  if (inspection.ok) throw new Error("Expected retained worker cleanup");
+  expect(inspection.error.cleanupResources).toEqual([workerRunId, root.path]);
   await expect(access(root.path)).resolves.toBeUndefined();
   expect(await provider.inspect({ path: database.path })).toMatchObject({
     ok: false,
@@ -269,11 +295,15 @@ it("retains the snapshot until a failed worker cleanup owner can be stopped", as
   await expect(provider.close()).rejects.toMatchObject({
     cleanupResources: [root.path],
   });
+  expect(inspection.error.cleanupResources).toEqual([root.path]);
+  expect(inspection.error.cleanupIncomplete).toBe(true);
   expect(child.signalCode).toBe("SIGKILL");
   expect(workerAttempts).toBe(4);
   expect(rootAttempts).toBe(1);
   rootRemovalAllowed = true;
   await provider.close();
+  expect(inspection.error.cleanupIncomplete).toBe(false);
+  expect(inspection.error.cleanupResources).toEqual([]);
   expect(workerAttempts).toBe(4);
   await expect(access(root.path)).rejects.toMatchObject({ code: "ENOENT" });
 });
