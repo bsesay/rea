@@ -1,3 +1,7 @@
+import {
+  workflowBashCommand,
+  workflowBashScript,
+} from "../../support/workflowGit.js";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -16,6 +20,10 @@ import { parse } from "yaml";
 import { z } from "zod";
 
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
 
 const repository = process.cwd();
 const actionPath = join(repository, ".github/actions/npm-cache/action.yml");
@@ -216,7 +224,7 @@ async function exerciseTrustedRetentionWithLegacyTarget(
     ghPath,
     `#!${process.execPath}\nconst fs = require("node:fs");\nconst [command, option, method, endpoint] = process.argv.slice(2);\nif (command !== "api" || option !== "--method") process.exit(2);\nfs.appendFileSync(process.env.FAKE_GH_LOG, method + " " + endpoint + "\\n");\nif (method === "GET") process.stdout.write(fs.readFileSync(process.env.FAKE_GH_CACHE_INPUT, "utf8"));\nelse if (method !== "DELETE") process.exit(2);\n`,
   );
-  await chmod(ghPath, 0o755);
+  await installNodeExecutable(ghPath, "commonjs");
   expect(retentionRun).toBe(
     "node trusted-retention/scripts/ci/cache-retention.mjs",
   );
@@ -228,6 +236,8 @@ async function exerciseTrustedRetentionWithLegacyTarget(
     cwd: runnerWorkspace,
     env: {
       PATH: join(runnerWorkspace, "bin"),
+      NODE_OPTIONS: nodeFixturePreload,
+      SystemRoot: process.env.SystemRoot,
       CI_REPOSITORY: "morluto/rea",
       CACHE_PREFIX: prefix,
       CACHE_KEEP_KEY: keepKey,
@@ -283,18 +293,22 @@ printf '%s\n' 'C:\Users\runner with spaces\AppData\Local\npm-cache'
         outputDirectory,
         `policy-${Date.now()}-${Math.random()}`,
       );
-      execFileSync("bash", ["-euo", "pipefail", "-c", command], {
-        env: {
-          ...process.env,
-          PATH: `${outputDirectory}${delimiter}${process.env.PATH ?? ""}`,
-          GITHUB_EVENT_NAME: event,
-          GITHUB_REF: ref,
-          GITHUB_OUTPUT: outputPath,
-          DEFAULT_BRANCH: defaultBranch,
-          LOCKFILES_HASH: "lock-hash",
-          RUNNER_OS: "Windows",
+      execFileSync(
+        workflowBashCommand,
+        ["-euo", "pipefail", "-c", workflowBashScript(command)],
+        {
+          env: {
+            ...process.env,
+            PATH: `${outputDirectory}${delimiter}${process.env.PATH ?? ""}`,
+            GITHUB_EVENT_NAME: event,
+            GITHUB_REF: ref,
+            GITHUB_OUTPUT: outputPath,
+            DEFAULT_BRANCH: defaultBranch,
+            LOCKFILES_HASH: "lock-hash",
+            RUNNER_OS: "Windows",
+          },
         },
-      });
+      );
       const output = await readFile(outputPath, "utf8");
       expect(output).toContain(`can-save=${expected}\n`);
       expect(output).toContain(

@@ -1,4 +1,7 @@
-import { access } from "node:fs/promises";
+import { elf } from "../../../src/domain/binaryTarget.fixture.js";
+import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { join } from "node:path";
+import { access, writeFile } from "node:fs/promises";
 
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { expect, it, vi } from "vitest";
@@ -20,6 +23,11 @@ import { GhidraFixtureLauncher } from "../providers/ghidra/ghidraClient.fixture.
 it.each([0, 1])(
   "releases cancelled MCP startup caller %s while its peer completes and stays warm",
   async (cancelledIndex) => {
+    const target = join(
+      await createTestTempDirectory("rea-ghidra-startup-target-"),
+      "target.elf",
+    );
+    await writeFile(target, elf(2, 1, 62));
     const entered = createDeferred<void>();
     const admitted = [createDeferred<void>(), createDeferred<void>()];
     const gate = createDeferred<void>();
@@ -32,6 +40,11 @@ it.each([0, 1])(
     const factory: GhidraProviderClientFactory = (options) => {
       const raw = new GhidraClient({
         ...options,
+        platform: process.platform,
+        transport:
+          process.platform === "win32"
+            ? "authenticated-loopback-tcp"
+            : "unix-socket",
         launcher: {
           async launch(launch, launchOptions) {
             producerSignal = launchOptions?.signal;
@@ -87,7 +100,7 @@ it.each([0, 1])(
       await mcp.connect(clientTransport);
       const opened = await mcp.callTool({
         name: "open_binary",
-        arguments: { path: process.execPath, provider_id: "ghidra" },
+        arguments: { path: target, provider_id: "ghidra" },
       });
       expect(opened.isError).not.toBe(true);
       for (const [index, controller] of controllers.entries()) {

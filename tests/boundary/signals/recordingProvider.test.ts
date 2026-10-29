@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { AnalysisResourceConstraintError } from "../../../src/domain/analysisErrorCore.js";
 import { signalDecodersSchema } from "../../../src/domain/signals/signalDecoders.js";
 import { projectAnalysisError } from "../../../src/domain/analysisErrorProjection.js";
@@ -591,21 +592,24 @@ it("preserves complete Evidence when aborted during post-run integrity checks", 
     (await readdir(f.directory)).filter((name) => name.startsWith("decoder-")),
   ).toEqual([]);
 });
-it("preserves configured symlink paths separately from resolved tool identities", async () => {
-  const f = await fixture("symlink");
-  const result = await f.service.decode({ path: f.path, decoders: "uart" });
-  if (!result.ok) throw result.error;
-  expect(result.value.normalized_result).toMatchObject({
-    tool: {
-      configured_path: join(f.directory, "configured-tool"),
-      path: join(f.directory, "producer.mjs"),
-    },
-    resource_limiter: {
-      configured_path: join(f.directory, "configured-tool"),
-      path: join(f.directory, "producer.mjs"),
-    },
-  });
-});
+it.skipIf(!symbolicLinksAvailable)(
+  "preserves configured symlink paths separately from resolved tool identities",
+  async () => {
+    const f = await fixture("symlink");
+    const result = await f.service.decode({ path: f.path, decoders: "uart" });
+    if (!result.ok) throw result.error;
+    expect(result.value.normalized_result).toMatchObject({
+      tool: {
+        configured_path: join(f.directory, "configured-tool"),
+        path: join(f.directory, "producer.mjs"),
+      },
+      resource_limiter: {
+        configured_path: join(f.directory, "configured-tool"),
+        path: join(f.directory, "producer.mjs"),
+      },
+    });
+  },
+);
 
 it.each(["oversized-copy", "oversized-tool"])(
   "identifies the mutated %s without blaming the admitted source",

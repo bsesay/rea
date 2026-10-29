@@ -274,8 +274,9 @@ it("retains reply-read cancellation and retries the failed reply descriptor clos
     { signal: controller.signal },
   );
   if (result.ok) throw new Error("Expected cancelled reply read");
-  expect(result.error).toMatchObject({ _tag: "AnalysisCancelledError" });
-  expect(result.error.cause).toBe(reason);
+  const primary = result.error.cleanupPrimary ?? result.error;
+  expect(primary).toMatchObject({ _tag: "AnalysisCancelledError" });
+  expect(primary.cause).toBe(reason);
   const cancelled = {
     code: "cleanup_incomplete",
     details: {

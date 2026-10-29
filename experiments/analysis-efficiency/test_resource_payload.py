@@ -83,7 +83,7 @@ class PayloadObservationTests(unittest.TestCase):
             self.assertEqual(observed['remaining_processes'], [100, 101])
             self.assertFalse(observed['payload_cleanup_verified'])
 
-    def test_excludes_unrelated_metadata_and_foreign_symlinks(self):
+    def test_excludes_unrelated_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'receipt.json'
             value = receipt()
@@ -93,8 +93,19 @@ class PayloadObservationTests(unittest.TestCase):
             observed = read_observation(path, 'own-unit')
             self.assertNotIn('environment', observed)
             self.assertNotIn('unrelated', observed['resource_events'])
+
+    def test_excludes_foreign_symlinks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'receipt.json'
+            value = receipt()
+            path.write_text(json.dumps(value))
             link = Path(directory) / 'linked.json'
-            link.symlink_to(path)
+            try:
+                link.symlink_to(path)
+            except OSError as error:
+                if getattr(error, 'winerror', None) == 1314:
+                    self.skipTest('requires Windows symbolic-link privilege')
+                raise
             self.assertIsNone(read_observation(link, 'own-unit'))
             self.assertEqual(json.loads(path.read_text()), value)
 

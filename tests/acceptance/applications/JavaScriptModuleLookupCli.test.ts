@@ -193,13 +193,17 @@ const expectNodeRuntimeControls = (
     { specifier: "./..pkg.js", ok: true, value: "local dot package" },
     {
       specifier: "./exact.js/.",
-      ok: false,
-      code: "ERR_UNSUPPORTED_DIR_IMPORT",
+      // Windows Node drops directory form; REA's canonical URL graph below
+      // conservatively retains it independently of the analysis host.
+      ...(process.platform === "win32"
+        ? { ok: true, value: 4 }
+        : { ok: false, code: "ERR_UNSUPPORTED_DIR_IMPORT" }),
     },
     {
       specifier: "./exact.js/child/..",
-      ok: false,
-      code: "ERR_UNSUPPORTED_DIR_IMPORT",
+      ...(process.platform === "win32"
+        ? { ok: true, value: 4 }
+        : { ok: false, code: "ERR_UNSUPPORTED_DIR_IMPORT" }),
     },
     {
       specifier: ".hidden.js",

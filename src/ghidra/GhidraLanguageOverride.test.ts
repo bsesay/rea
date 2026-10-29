@@ -11,7 +11,10 @@ import {
   ghidraProfileLanguageOverride,
   sameGhidraLanguageOverride,
 } from "./GhidraAnalysisProfile.js";
-import { ghidraProfileInstallationHost as host } from "./GhidraInstallation.fixture.js";
+import {
+  ghidraProfileInstallationHost as host,
+  ghidraProfileFixturePath,
+} from "./GhidraInstallation.fixture.js";
 import {
   admitGhidraLanguageOverride,
   parseGhidraLanguageDefinitions,
@@ -102,7 +105,7 @@ afterAll(async () => {
 
 const provider = (environment: Record<string, string>) => {
   const parsed = parseConfig({
-    GHIDRA_INSTALL_DIR: installDir,
+    GHIDRA_INSTALL_DIR: ghidraProfileFixturePath(installDir),
     ...environment,
   });
   if (!parsed.ok) throw parsed.error;

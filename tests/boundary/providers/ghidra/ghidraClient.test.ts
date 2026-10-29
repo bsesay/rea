@@ -36,10 +36,7 @@ import {
   GhidraLaunchError,
 } from "../../../../src/ghidra/GhidraLauncher.js";
 import type { GhidraDiagnostic } from "../../../../src/ghidra/GhidraClientTypes.js";
-import type {
-  GhidraLaunchSession,
-  GhidraLauncher,
-} from "../../../../src/ghidra/GhidraLauncher.js";
+import type { GhidraLauncher } from "../../../../src/ghidra/GhidraLauncher.js";
 import type { ProviderProcessHandle } from "../../../../src/process/ProviderProcess.js";
 import type { GhidraTransportKind } from "../../../../src/ghidra/GhidraTransport.js";
 import {
@@ -929,7 +926,10 @@ describe("GhidraClient", () => {
         HOST_TRANSPORT === "unix-socket" ||
         !GHIDRA_MUTATING_OPERATIONS.has(value),
     );
-    expect(started).toMatchObject({
+    expect(
+      started,
+      started.ok ? undefined : JSON.stringify(started.error),
+    ).toMatchObject({
       ok: true,
       value: {
         provider: { id: "ghidra", version: PROVIDER_VERSION },

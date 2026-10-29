@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import {
   access,
@@ -184,7 +185,7 @@ it.each(["symlink", "hardlink", "directory"])(
   "rejects a %s Python member without following it or extracting files",
   async (kind) => {
     const input = await fixture();
-    await exec("python3", [
+    await exec(pythonCommand, [
       "-I",
       "-S",
       "-c",

@@ -3,8 +3,12 @@ import { dirname, join, relative, resolve } from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
-import { clearClientLocationEnvironment } from "../../fixtures/clientEnvironment.js";
+import {
+  clearClientLocationEnvironment,
+  NPX_REGISTRATION_COMMAND,
+} from "../../fixtures/clientEnvironment.js";
 
 import { readClientRegistrationStatuses } from "../../../src/application/ClientRegistrationStatus.js";
 import { existingMaintenanceScope } from "../../../src/application/UpdateMaintenance.js";
@@ -23,8 +27,8 @@ describe("client registration status", () => {
       JSON.stringify({
         mcpServers: {
           rea: {
-            command: "npx",
-            args: ["-y", PRODUCT_IDENTITY.registrationPackageSpecifier, "mcp"],
+            command: NPX_REGISTRATION_COMMAND[0],
+            args: NPX_REGISTRATION_COMMAND.slice(1),
           },
         },
       }),
@@ -56,7 +60,7 @@ describe("client registration status", () => {
     ]);
     await writeFile(
       join(home, ".codex/config.toml"),
-      `[mcp_servers.rea]\ncommand = "npx"\nargs = ["-y", "${PRODUCT_IDENTITY.registrationPackageSpecifier}", "mcp"]\nstartup_timeout_sec = 30\ntool_timeout_sec = 450\n`,
+      `[mcp_servers.rea]\ncommand = ${JSON.stringify(NPX_REGISTRATION_COMMAND[0])}\nargs = ${JSON.stringify(NPX_REGISTRATION_COMMAND.slice(1))}\nstartup_timeout_sec = 30\ntool_timeout_sec = 450\n`,
     );
     await writeFile(
       join(home, ".cursor/mcp.json"),
@@ -466,17 +470,14 @@ describe("Node-wrapped registration policy", () => {
   it("checks a direct-launcher Codex startup timeout without Node wrapping", async () => {
     const home = await createTestTempDirectory("rea-direct-registration-");
     await mkdir(join(home, ".codex"));
+    const launcher = resolve("/current/rea");
     await writeFile(
       join(home, ".codex/config.toml"),
-      '[mcp_servers.rea]\ncommand = "/current/rea"\nargs = ["mcp"]\nstartup_timeout_sec = 1\n',
+      `[mcp_servers.rea]\ncommand = ${JSON.stringify(launcher)}\nargs = ["mcp"]\nstartup_timeout_sec = 1\n`,
     );
-    const statuses = await readClientRegistrationStatuses(
-      home,
-      "/current/rea",
-      {
-        environment: {},
-      },
-    );
+    const statuses = await readClientRegistrationStatuses(home, launcher, {
+      environment: {},
+    });
     expect(statuses).toEqual([
       expect.objectContaining({ client: "codex", state: "stale" }),
     ]);
@@ -584,15 +585,18 @@ it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
   },
 );
 
-it("reports a dangling configuration entry as missing without losing the detected client", async () => {
-  const home = await createTestTempDirectory(
-    "rea-registration-dangling-config-",
-  );
-  const path = join(home, ".claude.json");
-  await symlink(join(home, "absent.json"), path);
-  expect(
-    (await readClientRegistrationStatuses(home)).find(
-      (status) => status.client === "claude_code",
-    ),
-  ).toMatchObject({ config_path: path, state: "missing", command: [] });
-});
+it.skipIf(!symbolicLinksAvailable)(
+  "reports a dangling configuration entry as missing without losing the detected client",
+  async () => {
+    const home = await createTestTempDirectory(
+      "rea-registration-dangling-config-",
+    );
+    const path = join(home, ".claude.json");
+    await symlink(join(home, "absent.json"), path);
+    expect(
+      (await readClientRegistrationStatuses(home)).find(
+        (status) => status.client === "claude_code",
+      ),
+    ).toMatchObject({ config_path: path, state: "missing", command: [] });
+  },
+);

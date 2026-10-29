@@ -43,9 +43,11 @@ const unknownExpressions = [
 ];
 
 describe("JavaScript file URL paths", () => {
-  it.each(urlCases)(
+  it.for(urlCases)(
     "resolves %s to the file read by Node",
-    async (reference, target, sourcePath) => {
+    async ([reference, target, sourcePath], context) => {
+      if (process.platform === "win32" && target.includes("?"))
+        context.skip("Win32 forbids literal question marks in filenames");
       const root = await createTestTempDirectory("rea-file-url-path-");
       const sourceFile = join(root, sourcePath);
       await mkdir(dirname(sourceFile), { recursive: true });

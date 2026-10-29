@@ -1,4 +1,4 @@
-import { rm, writeFile } from "node:fs/promises";
+import { open, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,6 +23,39 @@ afterEach(async () => {
 });
 
 describe("Ghidra local transport", () => {
+  it.skipIf(process.platform !== "win32")(
+    "waits for the TCP publication delimiter while the Windows writer is active",
+    async () => {
+      const root = await createTestTempDirectory("rea-ghidra-publication-");
+      roots.push(root);
+      const runtime = await createGhidraTestRuntime(root);
+      runtimes.push(runtime);
+      const endpoint = {
+        transport: "authenticated-loopback-tcp" as const,
+        path: join(runtime.path, "bridge-endpoint.json"),
+      };
+      const writer = await open(endpoint.path, "wx");
+      try {
+        await expect(observeGhidraEndpoint(endpoint)).resolves.toEqual({
+          ok: true,
+          value: null,
+        });
+        await writer.writeFile('{"host":"127.0.0.1",');
+        await expect(observeGhidraEndpoint(endpoint)).resolves.toEqual({
+          ok: true,
+          value: null,
+        });
+        await writer.writeFile('"port":49152}\n');
+        await expect(observeGhidraEndpoint(endpoint)).resolves.toEqual({
+          ok: true,
+          value: { host: "127.0.0.1", port: 49152 },
+        });
+      } finally {
+        await writer.close();
+      }
+    },
+  );
+
   it("observes Unix readiness without interpreting endpoint content", async () => {
     const root = await createTestTempDirectory("rea-ghidra-transport-");
     roots.push(root);
@@ -71,7 +104,7 @@ describe("Ghidra local transport", () => {
       runtimes.push(runtime);
       const path = await publishGhidraTestEndpoint(
         runtime,
-        JSON.stringify(value),
+        `${JSON.stringify(value)}\n`,
       );
 
       await expect(
@@ -83,6 +116,23 @@ describe("Ghidra local transport", () => {
         ok: false,
         error: { kind: "start", message: "Ghidra TCP endpoint is invalid" },
       });
+    },
+  );
+
+  it.each(["{invalid}\n", `${" ".repeat(128)}\n`])(
+    "rejects a completed malformed or oversized endpoint %j",
+    async (content) => {
+      const root = await createTestTempDirectory("rea-ghidra-invalid-");
+      roots.push(root);
+      const runtime = await createGhidraTestRuntime(root);
+      runtimes.push(runtime);
+      const path = await publishGhidraTestEndpoint(runtime, content);
+      await expect(
+        observeGhidraEndpoint({
+          transport: "authenticated-loopback-tcp",
+          path,
+        }),
+      ).resolves.toMatchObject({ ok: false, error: { kind: "start" } });
     },
   );
 });

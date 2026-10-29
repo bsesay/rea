@@ -1,11 +1,8 @@
 import {
-  access,
-  chmod,
-  cp,
-  mkdir,
-  readFile,
-  writeFile,
-} from "node:fs/promises";
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -165,7 +162,7 @@ if (!Object.keys(result).length || Object.values(result).some(value => !value)) 
 process.stdout.write(JSON.stringify({data:{repository:result}}));
 `,
   );
-  await chmod(join(bin, "gh"), 0o755);
+  await installNodeExecutable(join(bin, "gh"), "module");
   seed = { directory, base, target };
 });
 
@@ -192,6 +189,7 @@ async function fixture() {
       env: {
         ...process.env,
         PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+        NODE_OPTIONS: nodeFixturePreload,
       },
     });
   await invoke([

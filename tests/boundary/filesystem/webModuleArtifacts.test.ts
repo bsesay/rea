@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   chmod,
   mkdir,
@@ -16,6 +17,8 @@ import { projectAnalysisError } from "../../../src/domain/analysisErrorProjectio
 import { webScriptExportResultSchema } from "../../../src/domain/webScriptExport.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { scriptScenarioFixture } from "../../fixtures/webScriptCapture.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 const fixture = async (bytes = Buffer.from('import "./dep.js";')) => {
   const root = await createTestTempDirectory("rea-module-artifacts-");
@@ -121,45 +124,51 @@ describe("selected captured module artifact boundary", () => {
         );
     }
   });
-  it("rejects source symlinks even when bytes have the expected digest", async () => {
-    const f = await fixture();
-    const real = join(f.root, "original.js");
-    await rename(f.sourcePath, real);
-    await symlink(real, f.sourcePath);
-    const response = await new LocalWebModuleArtifacts().load({
-      manifest_path: f.manifestPath,
-      script_index: 0,
-    });
-    expect(response.ok).toBe(false);
-  });
-  it("rejects directory symlinks and traversal in selected manifest paths", async () => {
-    const f = await fixture();
-    const original = dirname(f.sourcePath);
-    const moved = join(f.root, "moved");
-    await rename(original, moved);
-    await symlink(moved, original, "dir");
-    const response = await new LocalWebModuleArtifacts().load({
-      manifest_path: f.manifestPath,
-      script_index: 0,
-    });
-    expect(response.ok).toBe(false);
-    const manifest: unknown = JSON.parse(
-      await readFile(f.manifestPath, "utf8"),
-    );
-    const result = webScriptExportResultSchema
-      .omit({ manifest: true })
-      .parse(manifest);
-    const selected = result.scripts[0];
-    if (selected?.content.state !== "exported")
-      throw new Error("fixture source missing");
-    selected.content.relative_path = "../capture.json";
-    await writeFile(f.manifestPath, JSON.stringify(result));
-    const escaped = await new LocalWebModuleArtifacts().load({
-      manifest_path: f.manifestPath,
-      script_index: 0,
-    });
-    expect(escaped.ok).toBe(false);
-  });
+  symbolicLinkTest(
+    "rejects source symlinks even when bytes have the expected digest",
+    async () => {
+      const f = await fixture();
+      const real = join(f.root, "original.js");
+      await rename(f.sourcePath, real);
+      await symlink(real, f.sourcePath);
+      const response = await new LocalWebModuleArtifacts().load({
+        manifest_path: f.manifestPath,
+        script_index: 0,
+      });
+      expect(response.ok).toBe(false);
+    },
+  );
+  symbolicLinkTest(
+    "rejects directory symlinks and traversal in selected manifest paths",
+    async () => {
+      const f = await fixture();
+      const original = dirname(f.sourcePath);
+      const moved = join(f.root, "moved");
+      await rename(original, moved);
+      await symlink(moved, original, "dir");
+      const response = await new LocalWebModuleArtifacts().load({
+        manifest_path: f.manifestPath,
+        script_index: 0,
+      });
+      expect(response.ok).toBe(false);
+      const manifest: unknown = JSON.parse(
+        await readFile(f.manifestPath, "utf8"),
+      );
+      const result = webScriptExportResultSchema
+        .omit({ manifest: true })
+        .parse(manifest);
+      const selected = result.scripts[0];
+      if (selected?.content.state !== "exported")
+        throw new Error("fixture source missing");
+      selected.content.relative_path = "../capture.json";
+      await writeFile(f.manifestPath, JSON.stringify(result));
+      const escaped = await new LocalWebModuleArtifacts().load({
+        manifest_path: f.manifestPath,
+        script_index: 0,
+      });
+      expect(escaped.ok).toBe(false);
+    },
+  );
   it("reads only an explicit local map and rejects non-object JSON", async () => {
     const f = await fixture();
     const map = join(f.root, "map.json");

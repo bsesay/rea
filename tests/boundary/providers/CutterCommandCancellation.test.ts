@@ -11,7 +11,7 @@ import {
 import { ProviderCleanupError } from "../../../src/domain/providerCleanupError.js";
 import { CutterBridgeClient } from "../../../src/cutter/CutterBridgeClient.js";
 import { CutterBridgeService } from "../../../src/cutter/CutterBridgeService.js";
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { createCutterTestDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 
 it.each([
   new AnalysisInputError("opaque caller metadata"),
@@ -21,7 +21,7 @@ it.each([
 ])(
   "keeps a typed caller abort reason opaque at command admission: $_tag",
   async (reason) => {
-    const directory = await createTestTempDirectory(
+    const directory = await createCutterTestDirectory(
       "rea-cutter-command-cancel-",
     );
     const client = new CutterBridgeClient({ REA_CUTTER_BRIDGE_DIR: directory });
@@ -92,7 +92,7 @@ it.skipIf(process.platform === "win32").each([
 ])(
   "records cancellation during status recovery before command dispatch: %s",
   async (reason) => {
-    const directory = await createTestTempDirectory(
+    const directory = await createCutterTestDirectory(
       "rea-cutter-status-cancel-",
     );
     await chmod(directory, 0o700);

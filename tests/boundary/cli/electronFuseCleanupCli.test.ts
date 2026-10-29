@@ -1,8 +1,12 @@
 import { jsonObjectSchema } from "../../../src/domain/jsonValue.js";
 import { readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { expect } from "vitest";
-import { cliTest } from "../../support/cli/cliFixture.js";
+import {
+  cliTest,
+  cliProcessEnvironment,
+} from "../../support/cli/cliFixture.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import {
   thinFuseImage,
@@ -28,22 +32,22 @@ cliTest.for([
       process.execPath,
       [
         "--import",
-        resolve("tests/fixtures/electron/fuseCleanupPreload.mjs"),
+        pathToFileURL(resolve("tests/fixtures/electron/fuseCleanupPreload.mjs"))
+          .href,
         resolve("scripts/rea.mjs"),
         "inspect-electron-fuses",
         path,
         "--json",
       ],
       {
-        env: {
-          PATH: process.env.PATH,
+        env: cliProcessEnvironment({
           HOME: root,
           REA_LOG_LEVEL: "silent",
           REA_FUSE_PROBE_INPUT: path,
           REA_FUSE_PROBE_MODE: mode,
           REA_FUSE_PROBE_TRACE: tracePath,
           REA_FUSE_PROBE_ALLOW: join(root, "allow"),
-        },
+        }),
         timeoutMs: 30_000,
       },
     );

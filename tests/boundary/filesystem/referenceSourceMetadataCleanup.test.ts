@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { mkdir, open as fsOpen, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
@@ -8,6 +9,9 @@ import { importReferenceSource } from "../../../src/application/ReferenceSourceI
 import { readReferenceSourceVcs } from "../../../src/application/ReferenceSourceVcsAdapter.js";
 import { execFileOutput } from "../../../src/process/ExecFileOutput.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+
+// Successful source reads require the reader's no-follow-open authority.
+const referenceImportTest = it.skipIf(!noFollowOpenSupported());
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -78,8 +82,12 @@ const createPackedRefRepository = async () => {
   await execFileOutput("git", ["pack-refs", "--all", "--prune"], {
     cwd: root,
   });
-  const looseRef = join(root, ".git", "refs", "heads", "main");
-  const packedRefs = join(root, ".git", "packed-refs");
+  // isomorphic-git owns these lookup coordinates and uses forward slashes.
+  const looseRef = join(root, ".git", "refs", "heads", "main").replaceAll(
+    "\\",
+    "/",
+  );
+  const packedRefs = join(root, ".git", "packed-refs").replaceAll("\\", "/");
   await actual.mkdir(join(root, ".git", "refs", "heads"), {
     recursive: true,
   });
@@ -87,96 +95,102 @@ const createPackedRefRepository = async () => {
   return { root, looseRef, packedRefs };
 };
 
-it("retains failed .gitignore cleanup under the caller's scope", async () => {
-  const root = await createTestTempDirectory("rea-reference-ignore-owner-");
-  const path = join(root, ".gitignore");
-  await writeFile(path, "generated/\n");
-  const resources = new ArtifactResourceScope();
-  const close = failCloseUntilAllowed(path);
-  onTestFinished(async () => {
+referenceImportTest(
+  "retains failed .gitignore cleanup under the caller's scope",
+  async () => {
+    const root = await createTestTempDirectory("rea-reference-ignore-owner-");
+    const path = join(root, ".gitignore");
+    await writeFile(path, "generated/\n");
+    const resources = new ArtifactResourceScope();
+    const close = failCloseUntilAllowed(path);
+    onTestFinished(async () => {
+      close.allow();
+      await resources.close().catch(() => undefined);
+    });
+
+    const result = await importReferenceSource(
+      {
+        root,
+        caller: "reference-source-metadata-cleanup-test",
+        policy: { secretPatterns: [] },
+      },
+      resources,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "io",
+        cleanup: {
+          resources: [path],
+          reason: expect.stringContaining("injected metadata close failure"),
+        },
+      },
+    });
+    expect(close.calls()).toBe(2);
+
     close.allow();
-    await resources.close().catch(() => undefined);
-  });
+    await resources.close();
+    expect(close.calls()).toBe(3);
+  },
+);
 
-  const result = await importReferenceSource(
-    {
-      root,
-      caller: "reference-source-metadata-cleanup-test",
-      policy: { secretPatterns: [] },
-    },
-    resources,
-  );
-  expect(result).toMatchObject({
-    ok: false,
-    error: {
-      code: "io",
-      cleanup: {
-        resources: [path],
-        reason: expect.stringContaining("injected metadata close failure"),
+referenceImportTest(
+  "preserves Git metadata cleanup failure and the completed source read",
+  async () => {
+    const root = await createTestTempDirectory("rea-reference-head-owner-");
+    const repository = join(root, "repository");
+    const sourceRoot = join(root, "source");
+    await Promise.all([mkdir(repository), mkdir(sourceRoot)]);
+    await execFileOutput("git", ["init", "--initial-branch=main"], {
+      cwd: repository,
+    });
+    const source = join(sourceRoot, "main.ts");
+    const bytes = "export const value = 1;\n";
+    await writeFile(source, bytes);
+    await writeFile(join(sourceRoot, ".git"), "gitdir: ../repository/.git\n");
+    const head = join(sourceRoot, ".git");
+    const resources = new ArtifactResourceScope();
+    const close = failCloseUntilAllowed(head);
+    onTestFinished(async () => {
+      close.allow();
+      await resources.close().catch(() => undefined);
+    });
+
+    const result = await importReferenceSource(
+      {
+        root: sourceRoot,
+        excludePaths: [".git"],
+        caller: "reference-source-metadata-cleanup-test",
+        policy: { secretPatterns: [] },
       },
-    },
-  });
-  expect(close.calls()).toBe(2);
+      resources,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "io",
+        cleanup: {
+          resources: [head],
+          reason: expect.stringContaining("injected metadata close failure"),
+        },
+        partial: {
+          entries: [
+            {
+              kind: "file",
+              path: "main.ts",
+              bytes: Buffer.from(bytes),
+            },
+          ],
+        },
+      },
+    });
+    expect(close.calls()).toBe(2);
 
-  close.allow();
-  await resources.close();
-  expect(close.calls()).toBe(3);
-});
-
-it("preserves Git metadata cleanup failure and the completed source read", async () => {
-  const root = await createTestTempDirectory("rea-reference-head-owner-");
-  const repository = join(root, "repository");
-  const sourceRoot = join(root, "source");
-  await Promise.all([mkdir(repository), mkdir(sourceRoot)]);
-  await execFileOutput("git", ["init", "--initial-branch=main"], {
-    cwd: repository,
-  });
-  const source = join(sourceRoot, "main.ts");
-  const bytes = "export const value = 1;\n";
-  await writeFile(source, bytes);
-  await writeFile(join(sourceRoot, ".git"), "gitdir: ../repository/.git\n");
-  const head = join(sourceRoot, ".git");
-  const resources = new ArtifactResourceScope();
-  const close = failCloseUntilAllowed(head);
-  onTestFinished(async () => {
     close.allow();
-    await resources.close().catch(() => undefined);
-  });
-
-  const result = await importReferenceSource(
-    {
-      root: sourceRoot,
-      excludePaths: [".git"],
-      caller: "reference-source-metadata-cleanup-test",
-      policy: { secretPatterns: [] },
-    },
-    resources,
-  );
-  expect(result).toMatchObject({
-    ok: false,
-    error: {
-      code: "io",
-      cleanup: {
-        resources: [head],
-        reason: expect.stringContaining("injected metadata close failure"),
-      },
-      partial: {
-        entries: [
-          {
-            kind: "file",
-            path: "main.ts",
-            bytes: Buffer.from(bytes),
-          },
-        ],
-      },
-    },
-  });
-  expect(close.calls()).toBe(2);
-
-  close.allow();
-  await resources.close();
-  expect(close.calls()).toBe(3);
-});
+    await resources.close();
+    expect(close.calls()).toBe(3);
+  },
+);
 
 it("retains later packed-ref cleanup after an earlier loose-ref read failure", async () => {
   const { root, looseRef, packedRefs } = await createPackedRefRepository();

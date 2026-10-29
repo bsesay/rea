@@ -1,4 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -409,7 +413,7 @@ it("public CLI uses only GET and produces a report from fixture GitHub responses
   await writeFile(
     ghResponse,
     JSON.stringify([
-      [rawPull(51, { mergeable: true })],
+      [rawPull(51, { mergeable: true, created_at: new Date().toISOString() })],
       { total_count: 0, workflow_runs: [] },
     ]),
   );
@@ -417,13 +421,14 @@ it("public CLI uses only GET and produces a report from fixture GitHub responses
     fakeGh,
     `#!/usr/bin/env node\nconst fs=require("node:fs");\nconst args=process.argv.slice(2);\nfs.appendFileSync(process.env.CI_GH_CALLS, JSON.stringify(args)+"\\n");\nif(args[0]!=="api"||args[1]!=="--method"||args[2]!=="GET")process.exit(41);\nconst page=Number(new URL("https://fixture.invalid/"+args.at(-1)).searchParams.get("page"));\nconst responses=JSON.parse(fs.readFileSync(process.env.CI_GH_RESPONSE,"utf8"));\nprocess.stdout.write(JSON.stringify(responses[page===1&&args.at(-1).includes("/pulls?")?0:1]));\n`,
   );
-  await chmod(fakeGh, 0o755);
+  await installNodeExecutable(fakeGh, "commonjs");
   const outputDirectory = join(fixture.directory, ".cache", "ci-pr-health");
   await executeWorkflowFixture(process.execPath, [reporter], {
     cwd: fixture.directory,
     env: {
       ...process.env,
       PATH: `${fixture.fakeBin}${delimiter}${process.env.PATH ?? ""}`,
+      NODE_OPTIONS: nodeFixturePreload,
       CI_REPOSITORY: "owner/rea",
       CI_REPOSITORY_ID: "11",
       CI_DEFAULT_BRANCH: "main",
@@ -457,6 +462,7 @@ it("rejects non-GET methods before launching the GitHub client", async () => {
     env: {
       ...process.env,
       PATH: `${fixture.fakeBin}${delimiter}${process.env.PATH ?? ""}`,
+      NODE_OPTIONS: nodeFixturePreload,
       CI_GH_CALLS: join(fixture.directory, "should-not-exist"),
     },
   });

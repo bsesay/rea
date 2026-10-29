@@ -131,7 +131,8 @@ describe("analysis snapshots: persistence", () => {
     );
     if (!written.ok) throw written.error;
     expect((await readFile(path, "utf8")).endsWith("\n")).toBe(true);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32")
+      expect((await stat(path)).mode & 0o777).toBe(0o600);
     const roundTrip = await readAnalysisSnapshot(path);
     if (!roundTrip.ok) throw roundTrip.error;
 

@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -22,7 +23,7 @@ const resultSchema = z.array(
 );
 
 async function runProbe() {
-  const { stdout } = await execute("python3", [probe, bridge], {
+  const { stdout } = await execute(pythonCommand, [probe, bridge], {
     encoding: "utf8",
     timeout: 5_000,
     maxBuffer: 1_024 * 1_024,

@@ -178,7 +178,7 @@ describe("Windows private runtime admitted file close", () => {
     const runtime = WindowsPrivateRuntime.create("C:\\", "rea-");
     const readFailure: unknown = (() => {
       try {
-        runtime.readFile("endpoint");
+        runtime.readFile("endpoint", admittedFile.size);
         return undefined;
       } catch (cause: unknown) {
         return cause;
@@ -212,7 +212,7 @@ describe("Windows private runtime admitted file close", () => {
     const runtime = WindowsPrivateRuntime.create("C:\\", "rea-");
     const readFailure: unknown = (() => {
       try {
-        runtime.readFile("endpoint");
+        runtime.readFile("endpoint", admittedFile.size);
         return undefined;
       } catch (cause: unknown) {
         return cause;

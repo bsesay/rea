@@ -53,8 +53,14 @@ class CoreContextTests(unittest.TestCase):
             return [types.SimpleNamespace(start=4096, end=8192, offset=0, flags=5, objfile=objfile)]
 
         pwndbg.aglib.vmmap.get = maps
+        # This is a controlled Linux debugger model, including its POSIX limits.
+        # Windows has no resource module; do not claim host limit enforcement here.
+        resource = types.ModuleType("resource")
+        resource.RLIMIT_AS, resource.RLIMIT_CPU, resource.RLIMIT_FSIZE = range(3)
+        limits = {resource.RLIMIT_AS: 1048576, resource.RLIMIT_CPU: 30, resource.RLIMIT_FSIZE: 4096}
+        resource.getrlimit = lambda kind: (limits[kind], limits[kind])
         modules = {module.__name__: module for module in [
-            gdb, pwndbg, pwndbg.aglib, pwndbg.aglib.vmmap, pwndbg.lib, pwndbg.lib.version]}
+            gdb, pwndbg, pwndbg.aglib, pwndbg.aglib.vmmap, pwndbg.lib, pwndbg.lib.version, resource]}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             stage = root / "debugger"
@@ -77,6 +83,7 @@ class CoreContextTests(unittest.TestCase):
         self.assertEqual(commands[-4:], ["exec-file /proc/self/exe", "set architecture i386:x86-64", "core-file ../object.snapshot", "file"])
         self.assertLess(commands.index("set debug-file-directory ./no-libraries"), commands.index("core-file ../object.snapshot"))
         self.assertIsNone(result["value"]["executable"])
+        self.assertEqual(result["value"]["reported_limits"], {"address_space_bytes": 1048576, "cpu_seconds": 30, "file_size_bytes": 4096})
         self.assertEqual(result["value"]["maps"][0]["current_file_identity"], "unknown")
 
     def test_failed_guard_core_load_or_discard_never_queries_mappings(self):

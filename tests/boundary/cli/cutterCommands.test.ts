@@ -1,7 +1,7 @@
+import { cutterPrivateTemp } from "../../fixtures/cutterPrivateDirectory.js";
 import { createServer } from "node:net";
 import { createHmac, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -96,7 +96,7 @@ describe("Cutter CLI commands", () => {
   });
 
   it("lists sessions from the selected bridge directory", async () => {
-    directory = await mkdtemp(join(tmpdir(), "rea-cutter-cli-test-"));
+    directory = await cutterPrivateTemp("rea-cutter-cli-test-");
 
     const result = await serveCli(["list-cutter-sessions", "--json"], {
       REA_CUTTER_BRIDGE_DIR: directory,
@@ -113,7 +113,7 @@ describe("Cutter CLI commands", () => {
   it.skipIf(process.platform === "win32")(
     "awaits discovery cancellation on SIGINT and returns its typed outcome with exit130",
     async () => {
-      directory = await mkdtemp(join(tmpdir(), "rea-cutter-cli-cancel-"));
+      directory = await cutterPrivateTemp("rea-cutter-cli-cancel-");
       const sockets = new Set<import("node:net").Socket>();
       let accepted = 0;
       server = createServer((socket) => {
@@ -177,7 +177,7 @@ describe("Cutter CLI commands", () => {
   );
 
   it("reports an unavailable selected session for a command", async () => {
-    directory = await mkdtemp(join(tmpdir(), "rea-cutter-cli-test-"));
+    directory = await cutterPrivateTemp("rea-cutter-cli-test-");
 
     const result = await serveCli(
       ["cutter-command", SESSION_ID, "0", "pdi", "--json"],
@@ -203,7 +203,7 @@ describe("Cutter CLI command output flags", () => {
   });
 
   it("returns Evidence when the selected Cutter session completes a command", async () => {
-    directory = await mkdtemp(join(tmpdir(), "rea-cutter-cli-test-"));
+    directory = await cutterPrivateTemp("rea-cutter-cli-test-");
     const token = "synthetic-cutter-cli-token-for-test";
     let nextConnectionOrdinal = 0;
     const commandJsonModes: boolean[] = [];

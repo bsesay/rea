@@ -89,90 +89,96 @@ class RetryingHopperLauncher implements BridgeLauncher {
   }
 }
 
-it("retains Hopper process handles, private files, and lease until an actual session cleanup retry succeeds", async () => {
-  const leaseDirectory = await createShortLeaseDirectory();
-  const [first, second] = await createBinarySessionTargets();
-  const launcher = new RetryingHopperLauncher(leaseDirectory, first);
-  const hopper = new HopperClient({ launcher, startupTimeoutMs: 10_000 });
-  let clientsCreated = 0;
-  const session = createTestBinarySession(() => {
-    clientsCreated += 1;
-    return {
-      execute: async () => {
-        const started = await hopper.start();
-        return started.ok
-          ? resultOk(
-              createAnalysisExecution(null, {
-                id: "hopper",
-                name: "fixture Hopper",
-                version: null,
-              }),
-            )
-          : started;
-      },
-      close: (options) => hopper.close(options),
-    };
-  });
-  onTestFinished(async () => {
+it.skipIf(process.platform === "win32")(
+  "retains Hopper process handles, private files, and lease until an actual session cleanup retry succeeds",
+  async () => {
+    const leaseDirectory = await createShortLeaseDirectory();
+    const [first, second] = await createBinarySessionTargets();
+    const launcher = new RetryingHopperLauncher(leaseDirectory, first);
+    const hopper = new HopperClient({ launcher, startupTimeoutMs: 10_000 });
+    let clientsCreated = 0;
+    const session = createTestBinarySession(() => {
+      clientsCreated += 1;
+      return {
+        execute: async () => {
+          const started = await hopper.start();
+          return started.ok
+            ? resultOk(
+                createAnalysisExecution(null, {
+                  id: "hopper",
+                  name: "fixture Hopper",
+                  version: null,
+                }),
+              )
+            : started;
+        },
+        close: (options) => hopper.close(options),
+      };
+    });
+    onTestFinished(async () => {
+      launcher.cleanupAllowed = true;
+      const sessionClosed = await session.close();
+      if (!sessionClosed.ok) throw sessionClosed.error;
+      const hopperClosed = await hopper.close();
+      if (!hopperClosed.ok) throw hopperClosed.error;
+    });
+    expect(await session.open(first)).toMatchObject({ ok: true });
+    expect(await session.close()).toMatchObject({
+      ok: false,
+      error: { cleanupIncomplete: true },
+    });
+    const runtime = launcher.directory;
+    if (runtime === undefined)
+      throw new Error("Fixture did not capture its runtime");
+    await access(runtime);
+    // The fixture exits after its shutdown acknowledgement. When the supervisor
+    // observes that exit only after a failed verification began, it verifies
+    // once more; a failed stop never runs more than two verifications.
+    const firstCloseAttempts = launcher.cleanupAttempts;
+    expect(firstCloseAttempts).toBeGreaterThanOrEqual(1);
+    expect(firstCloseAttempts).toBeLessThanOrEqual(2);
+    expect(await launcher.acquire("other-owner")).toMatchObject({
+      acquired: false,
+    });
+    expect(await session.open(second)).toMatchObject({
+      ok: false,
+      error: { cleanupIncomplete: true },
+    });
+    expect(clientsCreated).toBe(1);
+    // The launcher exit was already observed, so the retry has no new evidence.
+    expect(launcher.cleanupAttempts).toBe(firstCloseAttempts + 1);
     launcher.cleanupAllowed = true;
-    const sessionClosed = await session.close();
-    if (!sessionClosed.ok) throw sessionClosed.error;
-    const hopperClosed = await hopper.close();
-    if (!hopperClosed.ok) throw hopperClosed.error;
-  });
-  expect(await session.open(first)).toMatchObject({ ok: true });
-  expect(await session.close()).toMatchObject({
-    ok: false,
-    error: { cleanupIncomplete: true },
-  });
-  const runtime = launcher.directory;
-  if (runtime === undefined)
-    throw new Error("Fixture did not capture its runtime");
-  await access(runtime);
-  // The fixture exits after its shutdown acknowledgement. When the supervisor
-  // observes that exit only after a failed verification began, it verifies
-  // once more; a failed stop never runs more than two verifications.
-  const firstCloseAttempts = launcher.cleanupAttempts;
-  expect(firstCloseAttempts).toBeGreaterThanOrEqual(1);
-  expect(firstCloseAttempts).toBeLessThanOrEqual(2);
-  expect(await launcher.acquire("other-owner")).toMatchObject({
-    acquired: false,
-  });
-  expect(await session.open(second)).toMatchObject({
-    ok: false,
-    error: { cleanupIncomplete: true },
-  });
-  expect(clientsCreated).toBe(1);
-  // The launcher exit was already observed, so the retry has no new evidence.
-  expect(launcher.cleanupAttempts).toBe(firstCloseAttempts + 1);
-  launcher.cleanupAllowed = true;
-  expect(await session.close()).toEqual(resultOk(null));
-  expect(launcher.cleanupAttempts).toBe(firstCloseAttempts + 2);
-  await expect(access(runtime)).rejects.toMatchObject({ code: "ENOENT" });
-  const replacement = await launcher.acquire("replacement-owner");
-  expect(replacement.acquired).toBe(true);
-  if (replacement.acquired) await replacement.lease.release();
-  expect((await session.open(second)).ok).toBe(true);
-  expect(clientsCreated).toBe(2);
-});
+    expect(await session.close()).toEqual(resultOk(null));
+    expect(launcher.cleanupAttempts).toBe(firstCloseAttempts + 2);
+    await expect(access(runtime)).rejects.toMatchObject({ code: "ENOENT" });
+    const replacement = await launcher.acquire("replacement-owner");
+    expect(replacement.acquired).toBe(true);
+    if (replacement.acquired) await replacement.lease.release();
+    expect((await session.open(second)).ok).toBe(true);
+    expect(clientsCreated).toBe(2);
+  },
+);
 
-it("reports a direct Hopper close failure and retries the retained owned process", async () => {
-  const leaseDirectory = await createShortLeaseDirectory();
-  const [target] = await createBinarySessionTargets();
-  const launcher = new RetryingHopperLauncher(leaseDirectory, target, true);
-  const hopper = new HopperClient({ launcher, startupTimeoutMs: 10_000 });
-  onTestFinished(async () => {
+it.skipIf(process.platform === "win32")(
+  "reports a direct Hopper close failure and retries the retained owned process",
+  async () => {
+    const leaseDirectory = await createShortLeaseDirectory();
+    const [target] = await createBinarySessionTargets();
+    const launcher = new RetryingHopperLauncher(leaseDirectory, target, true);
+    const hopper = new HopperClient({ launcher, startupTimeoutMs: 10_000 });
+    onTestFinished(async () => {
+      launcher.cleanupAllowed = true;
+      const closed = await hopper.close();
+      if (!closed.ok) throw closed.error;
+    });
+    expect(await hopper.start()).toMatchObject({ ok: true });
+    expect(await hopper.close()).toMatchObject({
+      ok: false,
+      error: { cleanupIncomplete: true },
+    });
+    expect(launcher.cleanupAttempts).toBe(1);
     launcher.cleanupAllowed = true;
-    const closed = await hopper.close();
-    if (!closed.ok) throw closed.error;
-  });
-  expect(await hopper.start()).toMatchObject({ ok: true });
-  expect(await hopper.close()).toMatchObject({
-    ok: false,
-    error: { cleanupIncomplete: true },
-  });
-  expect(launcher.cleanupAttempts).toBe(1);
-  launcher.cleanupAllowed = true;
-  expect(await hopper.close()).toEqual(resultOk(null));
-  expect(launcher.cleanupAttempts).toBe(2);
-});
+    expect(await hopper.close()).toEqual(resultOk(null));
+    expect(launcher.cleanupAttempts).toBe(2);
+  },
+);

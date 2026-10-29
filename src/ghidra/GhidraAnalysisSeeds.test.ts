@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../tests/fixtures/symbolicLinks.js";
 import { ArtifactResourceScope } from "../artifacts/ArtifactResourceScope.js";
 import { createHash } from "node:crypto";
 import {
@@ -140,17 +141,20 @@ describe("Ghidra seed commitment", () => {
     });
   });
 
-  it("commits the resolved path behind a configured symbolic link", async () => {
-    const directory = await workspace();
-    const path = join(directory, "seeds.tsv");
-    await writeFile(path, SEEDS);
-    const link = join(directory, "link.tsv");
-    await symlink(path, link);
-    const resolved = await resolveGhidraAnalysisSeeds(link, resources);
-    if (!resolved.ok || resolved.value === undefined)
-      throw new Error("Expected a commitment");
-    expect(resolved.value.path).toBe(await realpath(path));
-  });
+  it.skipIf(!symbolicLinksAvailable)(
+    "commits the resolved path behind a configured symbolic link",
+    async () => {
+      const directory = await workspace();
+      const path = join(directory, "seeds.tsv");
+      await writeFile(path, SEEDS);
+      const link = join(directory, "link.tsv");
+      await symlink(path, link);
+      const resolved = await resolveGhidraAnalysisSeeds(link, resources);
+      if (!resolved.ok || resolved.value === undefined)
+        throw new Error("Expected a commitment");
+      expect(resolved.value.path).toBe(await realpath(path));
+    },
+  );
 
   it("reports an unreadable seed file as a provider error", async () => {
     const resolved = await resolveGhidraAnalysisSeeds(

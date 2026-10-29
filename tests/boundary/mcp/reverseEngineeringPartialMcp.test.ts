@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import pino from "pino";
 import type { CallToolResult } from "@modelcontextprotocol/server";
 import { parseMcpToolError } from "../../fixtures/mcpToolError.js";
@@ -243,7 +244,7 @@ it("preserves the Rizin operation error when analysis retirement also fails", as
   });
 });
 
-it.each(["success", "timeout"])(
+it.skipIf(!symbolicLinksAvailable).each(["success", "timeout"])(
   "retains %s output and requires reopening after a symlink command",
   async (outcome) => {
     const [target] = await createBinarySessionTargets();

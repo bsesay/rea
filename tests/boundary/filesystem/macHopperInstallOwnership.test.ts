@@ -146,7 +146,7 @@ describe("macOS Hopper staging isolation", () => {
     expect(
       await readFile(join(destination, "Contents/MacOS/hopper"), "utf8"),
     ).toBe("new bundle");
-    expect(stagingMode).toBe(0o700);
+    if (process.platform !== "win32") expect(stagingMode).toBe(0o700);
     await expect(access(stagingRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

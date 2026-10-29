@@ -1,9 +1,12 @@
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { access } from "node:fs/promises";
 import * as filesystem from "node:fs/promises";
-import { expect, it, vi, onTestFinished } from "vitest";
+import { expect, it as test, vi, onTestFinished } from "vitest";
 import * as commands from "../../../../src/process/ExecFileOutput.js";
 import { createNativeUiHelperRuntime } from "../../../../src/native/NativeUiHelperRuntime.js";
 import { NativeUiCleanupError } from "../../../../src/native/NativeUiCleanupError.js";
+
+const it = test.skipIf(!symbolicLinksAvailable);
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const original = await importOriginal<typeof import("node:fs/promises")>();

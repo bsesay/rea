@@ -1,9 +1,13 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it as posixTest } from "vitest";
 import { z } from "zod";
+
+// These real Hopper bridge scenarios require its POSIX socket transport.
+const it = posixTest.skipIf(process.platform === "win32");
 
 const execute = promisify(execFile);
 const bridge = fileURLToPath(
@@ -25,7 +29,7 @@ const resultSchema = z.object({
 type ProbeResult = z.infer<typeof resultSchema>;
 
 async function runProbe(scenario: string): Promise<ProbeResult> {
-  const { stdout } = await execute("python3", [probe, bridge, scenario], {
+  const { stdout } = await execute(pythonCommand, [probe, bridge, scenario], {
     encoding: "utf8",
     timeout: 3_000,
     maxBuffer: 1_024 * 1_024,
@@ -90,7 +94,7 @@ describe("Hopper instruction block boundaries", () => {
 
   it("reports missing ownership support instead of guessing endpoint semantics", async () => {
     const { stdout } = await execute(
-      "python3",
+      pythonCommand,
       [probe, bridge, "no_ownership"],
       {
         encoding: "utf8",

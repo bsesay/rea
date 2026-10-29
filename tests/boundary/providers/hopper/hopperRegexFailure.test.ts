@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it as posixTest } from "vitest";
 import { HopperRegexSearch } from "../../../../src/hopper/HopperRegexSearch.js";
 import { HopperRemoteError } from "../../../../src/domain/hopperErrors.js";
 import { projectAnalysisError } from "../../../../src/domain/analysisErrorProjection.js";
@@ -6,6 +6,9 @@ import {
   HopperFixtureLauncher,
   startHopperFixtureClient,
 } from "./hopperClient.fixture.js";
+
+// These real Hopper bridge scenarios require its POSIX socket transport.
+const it = posixTest.skipIf(process.platform === "win32");
 
 it.each(
   (["search_strings", "search_procedures"] as const).flatMap((operation) =>

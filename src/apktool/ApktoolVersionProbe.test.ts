@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { ApktoolCommandCleanup } from "./ApktoolCommandCleanup.js";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -146,7 +147,7 @@ it("keeps unresolved probe cleanup typed when the launcher overflows its output"
 
   // Both provider entry points report the unresolved processes as cleanup.
   const provider = new ApktoolProvider({
-    environment: { REA_APKTOOL_COMMAND: "/opt/apktool/apktool" },
+    environment: { REA_APKTOOL_COMMAND: resolve(selection.command) },
   });
   vi.mocked(runOwnedCommand).mockRejectedValueOnce(overflow());
   await expect(provider.inspectAvailability()).rejects.toMatchObject({

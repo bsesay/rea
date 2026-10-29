@@ -29,6 +29,11 @@ const digest = (bytes: Buffer): string =>
   createHash("sha256").update(bytes).digest("hex");
 
 for (const expectedErrno of ["ELOOP", "ENAMETOOLONG"] as const) {
+  // libuv reports an overlong NTFS component as ENOENT on Windows.
+  const reportedReason =
+    expectedErrno === "ENAMETOOLONG" && process.platform === "win32"
+      ? "Selected SQLite database does not exist:"
+      : expectedErrno;
   cliTest.skipIf(expectedErrno === "ELOOP" && process.platform === "win32")(
     `reports an initial ${expectedErrno} path failure through CLI and MCP`,
     async ({ cli }) => {
@@ -53,7 +58,7 @@ for (const expectedErrno of ["ELOOP", "ENAMETOOLONG"] as const) {
             {
               path: ["path"],
               reason: "invalid_value",
-              message: expect.stringContaining(expectedErrno),
+              message: expect.stringContaining(reportedReason),
             },
           ],
         },

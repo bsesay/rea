@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -6,32 +7,38 @@ import { expect, it } from "vitest";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { importReferenceSource } from "../../support/referenceSourceResourceScope.js";
 
-it("imports valid CommonJS wrapper syntax without inventing a parse failure", async () => {
-  const root = await createTestTempDirectory("rea-reference-commonjs-mode-");
-  await Promise.all([
-    writeFile(
-      join(root, "main.cjs"),
-      'void new.target; require("./dep.cjs"); return;\n',
-    ),
-    writeFile(join(root, "dep.cjs"), "module.exports = 1;\n"),
-  ]);
-  const imported = await importReferenceSource({
-    root,
-    caller: "native-commonjs-source",
-    policy: { secretPatterns: [] },
-  });
-  if (!imported.ok) throw imported.error;
-  expect(imported.value.parse_failures).toEqual([]);
-  expect(imported.value.relationships).toContainEqual({
-    from_path: "main.cjs",
-    to: "dep.cjs",
-    kind: "requires",
-    resolution: "internal",
-    parse_state: "parsed",
-  });
-});
+// A real reference import requires the reader's no-follow-open authority.
+const referenceImportTest = it.skipIf(!noFollowOpenSupported());
 
-it.each([
+referenceImportTest(
+  "imports valid CommonJS wrapper syntax without inventing a parse failure",
+  async () => {
+    const root = await createTestTempDirectory("rea-reference-commonjs-mode-");
+    await Promise.all([
+      writeFile(
+        join(root, "main.cjs"),
+        'void new.target; require("./dep.cjs"); return;\n',
+      ),
+      writeFile(join(root, "dep.cjs"), "module.exports = 1;\n"),
+    ]);
+    const imported = await importReferenceSource({
+      root,
+      caller: "native-commonjs-source",
+      policy: { secretPatterns: [] },
+    });
+    if (!imported.ok) throw imported.error;
+    expect(imported.value.parse_failures).toEqual([]);
+    expect(imported.value.relationships).toContainEqual({
+      from_path: "main.cjs",
+      to: "dep.cjs",
+      kind: "requires",
+      resolution: "internal",
+      parse_state: "parsed",
+    });
+  },
+);
+
+referenceImportTest.each([
   ["main.ts", "dep.js", "dep.ts"],
   ["main.mts", "dep.mjs", "dep.mts"],
   ["main.cts", "dep.cjs", "dep.cts"],
@@ -72,7 +79,7 @@ it.each([
   },
 );
 
-it.each(["main.ts", "main.js"])(
+referenceImportTest.each(["main.ts", "main.js"])(
   "retains an existing declared runtime file for %s",
   async (from) => {
     const root = await createTestTempDirectory("rea-reference-ts-control-");
@@ -97,23 +104,26 @@ it.each(["main.ts", "main.js"])(
   },
 );
 
-it("does not substitute TypeScript sources for a JavaScript runtime import", async () => {
-  const root = await createTestTempDirectory("rea-reference-js-control-");
-  await Promise.all([
-    writeFile(join(root, "main.js"), 'export { value } from "./dep.js";\n'),
-    writeFile(join(root, "dep.ts"), "export const value = 1;\n"),
-  ]);
-  const imported = await importReferenceSource({
-    root,
-    caller: "native-typescript-source",
-    policy: { secretPatterns: [] },
-  });
-  if (!imported.ok) throw imported.error;
-  expect(imported.value.relationships).toContainEqual(
-    expect.objectContaining({
-      from_path: "main.js",
-      to: "dep.js",
-      resolution: "unresolved",
-    }),
-  );
-});
+referenceImportTest(
+  "does not substitute TypeScript sources for a JavaScript runtime import",
+  async () => {
+    const root = await createTestTempDirectory("rea-reference-js-control-");
+    await Promise.all([
+      writeFile(join(root, "main.js"), 'export { value } from "./dep.js";\n'),
+      writeFile(join(root, "dep.ts"), "export const value = 1;\n"),
+    ]);
+    const imported = await importReferenceSource({
+      root,
+      caller: "native-typescript-source",
+      policy: { secretPatterns: [] },
+    });
+    if (!imported.ok) throw imported.error;
+    expect(imported.value.relationships).toContainEqual(
+      expect.objectContaining({
+        from_path: "main.js",
+        to: "dep.js",
+        resolution: "unresolved",
+      }),
+    );
+  },
+);

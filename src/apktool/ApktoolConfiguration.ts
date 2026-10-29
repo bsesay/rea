@@ -68,9 +68,11 @@ export const resolveApktoolCommand = async (
   const selectedEnvironment = snapshotEnvironment(environment, platform);
   const configured = selectedEnvironment[APKTOOL_COMMAND_ENV];
   if (configured !== undefined && configured.trim() !== "") {
+    // A single Windows root separator still depends on the current drive.
     if (
       !(platform === "win32"
-        ? win32.isAbsolute(configured)
+        ? win32.isAbsolute(configured) &&
+          win32.parse(configured).root.length > 1
         : isAbsolute(configured))
     )
       throw new ApktoolConfigurationFailure(

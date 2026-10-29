@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { execFile } from "node:child_process";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -10,6 +11,9 @@ import {
   importReferenceSource,
   readReferenceSource,
 } from "../../support/referenceSourceResourceScope.js";
+
+// A real reference import requires the reader's no-follow-open authority.
+const referenceImportTest = it.skipIf(!noFollowOpenSupported());
 
 const importTree = (root: string) =>
   importReferenceSource({
@@ -124,15 +128,22 @@ describe("reference import native entry failure details", () => {
     },
   );
 
-  it("preserves an ordinary readable source-file control", async () => {
-    const root = await createTestTempDirectory("rea-import-native-readable-");
-    await writeFile(join(root, "main.ts"), "export const value = 1;\n");
-    const imported = await importTree(root);
-    if (!imported.ok) throw new Error(imported.error.message);
-    expect(
-      imported.value.entries.find(({ path }) => path === "main.ts"),
-    ).toMatchObject({ kind: "file", content_state: "hashed", limitations: [] });
-  });
+  referenceImportTest(
+    "preserves an ordinary readable source-file control",
+    async () => {
+      const root = await createTestTempDirectory("rea-import-native-readable-");
+      await writeFile(join(root, "main.ts"), "export const value = 1;\n");
+      const imported = await importTree(root);
+      if (!imported.ok) throw new Error(imported.error.message);
+      expect(
+        imported.value.entries.find(({ path }) => path === "main.ts"),
+      ).toMatchObject({
+        kind: "file",
+        content_state: "hashed",
+        limitations: [],
+      });
+    },
+  );
 });
 
 describe("reference import paths beyond the platform limit", () => {

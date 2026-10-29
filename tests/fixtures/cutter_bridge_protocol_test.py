@@ -537,7 +537,7 @@ class ProtocolProducerTest(unittest.TestCase):
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        os.environ["REA_CUTTER_BRIDGE_DIR"] = self.temp.name
+        os.environ["REA_CUTTER_BRIDGE_DIR"] = str(Path(self.temp.name) / "bridge")
         self.dispatcher = Dispatcher()
         self.server = bridge._BridgeServer(self.dispatcher)
         bridge.SOCKET_TIMEOUT_SECONDS = 0.1

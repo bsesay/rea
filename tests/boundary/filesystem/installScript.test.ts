@@ -12,7 +12,10 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { spawn as spawnPty } from "@lydell/node-pty";
-import { describe, expect, it } from "vitest";
+import { describe as suite, expect, it } from "vitest";
+
+// install.sh and these executable shell doubles require a POSIX execution host.
+const describe = suite.skipIf(process.platform === "win32");
 
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 

@@ -1,3 +1,4 @@
+import { hardenCutterFixtureDirectory } from "./cutterPrivateDirectory.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createServer } from "node:net";
@@ -120,8 +121,9 @@ export const writeDescriptor = async (
     readonly documentGeneration?: number;
     readonly maxRequestBytes?: number;
   } = {},
-): Promise<void> =>
-  writeFile(
+): Promise<void> => {
+  hardenCutterFixtureDirectory(directory);
+  await writeFile(
     join(directory, `cutter-${process.pid}-${sessionId}.json`),
     JSON.stringify({
       session_id: sessionId,
@@ -139,3 +141,4 @@ export const writeDescriptor = async (
     }),
     { mode: 0o600 },
   );
+};

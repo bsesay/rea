@@ -102,7 +102,7 @@ cliTest(
   },
 );
 
-cliTest(
+cliTest.skipIf(process.platform === "win32")(
   "resolves ESM specifiers containing whitespace using URL text semantics",
   async ({ cli }) => {
     const root = await createTestTempDirectory("rea-esm-whitespace-path-");

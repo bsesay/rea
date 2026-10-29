@@ -1,7 +1,7 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 
-import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { describe, expect, it as posixTest, onTestFinished, vi } from "vitest";
 
 import { projectAnalysisError } from "../../../../src/domain/analysisErrorProjection.js";
 import { ok } from "../../../../src/domain/result.js";
@@ -11,6 +11,11 @@ import type {
 } from "../../../../src/hopper/BridgeLauncher.js";
 import { HopperClient } from "../../../../src/hopper/HopperClient.js";
 import { HopperFixtureLauncher } from "./hopperClient.fixture.js";
+
+// These real Hopper bridge scenarios require its POSIX socket transport.
+const it = posixTest.skipIf(process.platform === "win32");
+
+// Hopper has a POSIX Unix-domain socket transport and no Windows provider lane.
 
 class ObservedProcess extends EventEmitter {
   readonly stdout = new PassThrough();

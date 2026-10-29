@@ -1,3 +1,4 @@
+import { NPX_REGISTRATION_COMMAND } from "../../fixtures/clientEnvironment.js";
 import { access, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { expect } from "vitest";
@@ -200,12 +201,7 @@ cliTest(
       mcp: {
         rea: {
           type: "local",
-          command: [
-            "npx",
-            "-y",
-            PRODUCT_IDENTITY.registrationPackageSpecifier,
-            "mcp",
-          ],
+          command: NPX_REGISTRATION_COMMAND,
           enabled: true,
         },
         other: { type: "local", command: ["other"] },
@@ -482,12 +478,7 @@ cliTest(
         mcp: {
           rea: {
             type: "local",
-            command: [
-              "npx",
-              "-y",
-              PRODUCT_IDENTITY.registrationPackageSpecifier,
-              "mcp",
-            ],
+            command: NPX_REGISTRATION_COMMAND,
             enabled: true,
           },
         },
@@ -541,12 +532,7 @@ cliTest(
     await mkdir(dirname(custom), { recursive: true });
     const owned = {
       type: "local",
-      command: [
-        "npx",
-        "-y",
-        PRODUCT_IDENTITY.registrationPackageSpecifier,
-        "mcp",
-      ],
+      command: NPX_REGISTRATION_COMMAND,
       enabled: true,
     };
     const original = JSON.stringify({

@@ -283,9 +283,9 @@ public final class ReaGhidraBridge extends HeadlessScript {
             JsonObject endpoint = new JsonObject();
             endpoint.addProperty("host", "127.0.0.1");
             endpoint.addProperty("port", address.getPort());
-            // The Windows native reader refuses a file while a writer still
-            // owns it. Closing CREATE_NEW publishes the complete record without
-            // requesting rename rights on the retained private directory guard.
+            // CREATE_NEW exposes the Windows name before writing completes.
+            // The reader waits for the final newline before parsing the record,
+            // without rename rights on the retained private directory guard.
             Files.writeString(
                 isWindowsHost() ? endpointPath : pendingPath,
                 GSON.toJson(endpoint) + "\n",

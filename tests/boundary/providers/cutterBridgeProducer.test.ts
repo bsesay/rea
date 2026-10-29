@@ -1,7 +1,9 @@
+import { cutterPrivateTemp } from "../../fixtures/cutterPrivateDirectory.js";
+import { pythonCommand } from "../../fixtures/pythonCommand.js";
 import { execFileSync } from "node:child_process";
-import { chmod, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { chmod, rm } from "node:fs/promises";
+
+import { resolve } from "node:path";
 
 import { expect, it } from "vitest";
 
@@ -13,11 +15,11 @@ import {
 } from "../../../tests/support/process/processFixture.js";
 
 const startPythonBridge = async () => {
-  const directory = await mkdtemp(join(tmpdir(), "rea-cutter-receipt-"));
+  const directory = await cutterPrivateTemp("rea-cutter-receipt-");
   await chmod(directory, 0o700);
   const processes = createTestProcessRegistry();
   const child = processes.spawn(
-    "python3",
+    pythonCommand,
     [resolve("tests/fixtures/cutter_bridge_protocol_test.py"), "--serve"],
     { env: { ...process.env, REA_CUTTER_BRIDGE_DIR: directory } },
   );
@@ -41,7 +43,7 @@ const startPythonBridge = async () => {
         5_000,
       );
       const onData = (_chunk: string): void => {
-        if (!stdout.includes("ready\n")) return;
+        if (!/ready\r?\n/u.test(stdout)) return;
         clearTimeout(timeout);
         child.stdout.off("data", onData);
         resolveReady();
@@ -52,7 +54,7 @@ const startPythonBridge = async () => {
         rejectReady(error);
       });
       child.once("exit", (code, signal) => {
-        if (stdout.includes("ready\n")) return;
+        if (/ready\r?\n/u.test(stdout)) return;
         clearTimeout(timeout);
         rejectReady(
           new Error(
@@ -60,7 +62,7 @@ const startPythonBridge = async () => {
           ),
         );
       });
-      if (stdout.includes("ready\n")) onData("");
+      if (/ready\r?\n/u.test(stdout)) onData("");
     });
     const client = new CutterBridgeClient({
       ...process.env,
@@ -96,7 +98,7 @@ const startPythonBridge = async () => {
 
 it("authenticates bridge peers before payloads and permits status recovery after a poisoned UI timeout", () => {
   execFileSync(
-    "python3",
+    pythonCommand,
     [resolve("tests/fixtures/cutter_bridge_protocol_test.py")],
     {
       encoding: "utf8",

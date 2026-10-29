@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { AnalysisResourceConstraintError } from "../../../src/domain/analysisErrorCore.js";
 import { packetFieldsCatalogSchema } from "../../../src/domain/captures/packetFields.js";
 import { OwnedCommandFailure } from "../../../src/process/OwnedCommand.js";
@@ -412,18 +413,24 @@ it("refuses unsupported hosts before launching or allocating a workspace", async
   });
 });
 
-it("selects TShark from PATH with the shared rule and records the selection", async () => {
-  const f = await fixture("path");
-  const result = await f.service.inspect({ path: f.path, fields: ["ip.addr"] });
-  if (!result.ok) throw result.error;
-  expect(result.value.normalized_result).toMatchObject({
-    tool: {
-      configured_path: join(f.directory, "tshark"),
-      selection_source: "path",
-      path: join(f.directory, "producer.mjs"),
-    },
-  });
-});
+it.skipIf(!symbolicLinksAvailable)(
+  "selects TShark from PATH with the shared rule and records the selection",
+  async () => {
+    const f = await fixture("path");
+    const result = await f.service.inspect({
+      path: f.path,
+      fields: ["ip.addr"],
+    });
+    if (!result.ok) throw result.error;
+    expect(result.value.normalized_result).toMatchObject({
+      tool: {
+        configured_path: join(f.directory, "tshark"),
+        selection_source: "path",
+        path: join(f.directory, "producer.mjs"),
+      },
+    });
+  },
+);
 
 it.each([
   [
@@ -493,22 +500,28 @@ it("preserves complete Evidence when aborted during post-run integrity checks", 
     (await readdir(f.directory)).filter((name) => name.startsWith("decoder-")),
   ).toEqual([]);
 });
-it("preserves configured symlink paths separately from resolved tool identities", async () => {
-  const f = await fixture("symlink");
-  const result = await f.service.inspect({ path: f.path, fields: ["ip.addr"] });
-  if (!result.ok) throw result.error;
-  expect(result.value.normalized_result).toMatchObject({
-    tool: {
-      configured_path: join(f.directory, "configured-tool"),
-      selection_source: "environment",
-      path: join(f.directory, "producer.mjs"),
-    },
-    resource_limiter: {
-      configured_path: join(f.directory, "configured-tool"),
-      path: join(f.directory, "producer.mjs"),
-    },
-  });
-});
+it.skipIf(!symbolicLinksAvailable)(
+  "preserves configured symlink paths separately from resolved tool identities",
+  async () => {
+    const f = await fixture("symlink");
+    const result = await f.service.inspect({
+      path: f.path,
+      fields: ["ip.addr"],
+    });
+    if (!result.ok) throw result.error;
+    expect(result.value.normalized_result).toMatchObject({
+      tool: {
+        configured_path: join(f.directory, "configured-tool"),
+        selection_source: "environment",
+        path: join(f.directory, "producer.mjs"),
+      },
+      resource_limiter: {
+        configured_path: join(f.directory, "configured-tool"),
+        path: join(f.directory, "producer.mjs"),
+      },
+    });
+  },
+);
 
 it.each(["oversized-copy", "oversized-tool"])(
   "identifies the mutated %s without blaming the admitted source",

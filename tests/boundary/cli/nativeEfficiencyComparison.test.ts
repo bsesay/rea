@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -161,7 +162,7 @@ it.each([
       join(trial, "events.jsonl"),
       events.map((value) => JSON.stringify(value)).join("\n"),
     );
-    const command = execute("python3", [
+    const command = execute(pythonCommand, [
       resolve("experiments/analysis-efficiency/review-model.py"),
       "--domain",
       "native",

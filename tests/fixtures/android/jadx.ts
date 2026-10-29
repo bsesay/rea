@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   access,
   chmod,
@@ -23,6 +25,43 @@ import { writeJadxJarInventory } from "./jadxJar.js";
 
 const fixture = fileURLToPath(new URL("./jadx-mcp.mjs", import.meta.url));
 
+const writeJavaProbe = async (
+  root: string,
+  java: string,
+  javaProbeLog: string,
+): Promise<void> => {
+  if (process.platform === "win32") {
+    // The module-listing admission probe must see a native executable, not a Unix shebang.
+    const source = join(root, "JavaProbe.cs");
+    await writeFile(
+      source,
+      `using System; using System.IO;
+class JavaProbe { static void Main(string[] args) {
+ if (args.Length == 1 && args[0] == "--list-modules") {
+  File.AppendAllText(${JSON.stringify(javaProbeLog)}, "probe\\n");
+  Console.WriteLine("java.base@21.0.0\\njdk.compiler@21.0.0");
+ }
+} }`,
+    );
+    await promisify(execFile)(
+      join(
+        process.env.SystemRoot ?? "C:\\Windows",
+        "Microsoft.NET",
+        "Framework64",
+        "v4.0.30319",
+        "csc.exe",
+      ),
+      ["/nologo", "/target:exe", `/out:${java}`, source],
+    );
+  } else {
+    await writeFile(
+      java,
+      `#!/usr/bin/env node\nif (process.argv[2] === "--list-modules") { require("node:fs").appendFileSync(${JSON.stringify(javaProbeLog)}, "probe\\n"); console.log("java.base@21.0.0\\njdk.compiler@21.0.0"); }\n`,
+    );
+    await chmod(java, 0o755);
+  }
+};
+
 /** Real owned subprocess running a synthetic MCP producer, with no module mocks. */
 export const createJadxProtocolFixture = async (
   mode = "normal",
@@ -35,14 +74,13 @@ export const createJadxProtocolFixture = async (
   const jar = join(root, "fixture.jar");
   const javaHome = join(root, "jdk");
   const javaBin = join(javaHome, "bin");
-  const java = join(javaBin, "java");
+  const java = join(
+    javaBin,
+    process.platform === "win32" ? "java.exe" : "java",
+  );
   const javaProbeLog = join(root, "java-probes.log");
   await mkdir(javaBin, { recursive: true });
-  await writeFile(
-    java,
-    `#!/usr/bin/env node\nif (process.argv[2] === "--list-modules") { require("node:fs").appendFileSync(${JSON.stringify(javaProbeLog)}, "probe\\n"); console.log("java.base@21.0.0\\njdk.compiler@21.0.0"); }\n`,
-  );
-  await chmod(java, 0o755);
+  await writeJavaProbe(root, java, javaProbeLog);
   await writeOrderedZip(apk, ["AndroidManifest.xml", "classes.dex"]);
   await writeJadxJarInventory(jar);
   const launches: {

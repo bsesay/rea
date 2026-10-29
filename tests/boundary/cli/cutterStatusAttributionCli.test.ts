@@ -1,3 +1,4 @@
+import { hardenCutterFixtureDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 import { expect } from "vitest";
 import { chmod } from "node:fs/promises";
 import { workspaceCliTest } from "../../support/cli/workspaceCliFixture.js";
@@ -15,6 +16,7 @@ workspaceCliTest.for([
   "retains caller operation and preflight proof through the CLI: %s",
   async (mode, { cli, workspace }) => {
     const directory = await workspace.mkdir("bridge");
+    hardenCutterFixtureDirectory(directory);
     if (process.platform !== "win32") await chmod(directory, 0o700);
     const token = "synthetic-cutter-status-test-token";
     const calls: string[] = [];

@@ -267,6 +267,7 @@ class NativeTraceBudgetTests(unittest.TestCase):
         tracer._set_launch_flags(launch)
         self.assertEqual(launch.flags, 14)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFO support")
     def test_output_pipe_counts_all_bytes_and_keeps_only_the_prefix(self):
         with tempfile.TemporaryDirectory() as directory:
             fifo = os.path.join(directory, "stdout.fifo")
@@ -289,6 +290,7 @@ class NativeTraceBudgetTests(unittest.TestCase):
             self.assertTrue(sink.truncated)
             self.assertTrue(sink.complete)
 
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX FIFO support")
     def test_output_pipe_reports_incomplete_capture_after_unexpected_close(self):
         with tempfile.TemporaryDirectory() as directory:
             fifo = os.path.join(directory, "stdout.fifo")

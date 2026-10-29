@@ -10,7 +10,7 @@ export const expectGdbSessionStarted = async (
   ...arguments_: Parameters<GdbSessionManager["start"]>
 ): Promise<StartedGdbSession> => {
   const started = await manager.start(...arguments_);
-  expect(started.ok).toBe(true);
+  expect(started.ok, started.ok ? undefined : started.error.message).toBe(true);
   if (!started.ok) throw new Error(started.error.message);
   return started;
 };

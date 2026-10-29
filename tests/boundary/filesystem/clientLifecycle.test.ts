@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { constants as fsConstants } from "node:fs";
 import {
   chmod,
@@ -202,47 +203,53 @@ describe("Codex MCP tool deadlines", () => {
 });
 
 describe("client configuration filesystem lifecycle", () => {
-  it("updates a symlink target without replacing the TOML config symlink", async () => {
-    const home = await createTestTempDirectory("rea-toml-symlink-");
-    roots.push(home);
-    const configPath = join(home, ".codex/config.toml");
-    const targetPath = join(home, "managed-config.toml");
-    const original = 'model = "gpt-5"\n';
-    await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(targetPath, original);
-    await symlink(targetPath, configPath);
+  it.skipIf(!symbolicLinksAvailable)(
+    "updates a symlink target without replacing the TOML config symlink",
+    async () => {
+      const home = await createTestTempDirectory("rea-toml-symlink-");
+      roots.push(home);
+      const configPath = join(home, ".codex/config.toml");
+      const targetPath = join(home, "managed-config.toml");
+      const original = 'model = "gpt-5"\n';
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(targetPath, original);
+      await symlink(targetPath, configPath);
 
-    expect(
-      await configureClientConfiguration(
-        { name: "codex", configPath, format: "toml" },
-        undefined,
-        ["rea", "mcp"],
-      ),
-    ).toMatchObject({ status: "configured" });
-    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
-    expect(await readFile(`${configPath}.rea.backup`, "utf8")).toBe(original);
-    expect(await readFile(targetPath, "utf8")).toContain("[mcp_servers.rea]");
-  });
+      expect(
+        await configureClientConfiguration(
+          { name: "codex", configPath, format: "toml" },
+          undefined,
+          ["rea", "mcp"],
+        ),
+      ).toMatchObject({ status: "configured" });
+      expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+      expect(await readFile(`${configPath}.rea.backup`, "utf8")).toBe(original);
+      expect(await readFile(targetPath, "utf8")).toContain("[mcp_servers.rea]");
+    },
+  );
 
-  it("fails before mutation when a TOML config symlink is dangling", async () => {
-    const home = await createTestTempDirectory("rea-toml-symlink-");
-    roots.push(home);
-    const configPath = join(home, ".codex/config.toml");
-    await mkdir(dirname(configPath), { recursive: true });
-    await symlink(join(home, "missing-config.toml"), configPath);
+  it.skipIf(!symbolicLinksAvailable)(
+    "fails before mutation when a TOML config symlink is dangling",
+    async () => {
+      const home = await createTestTempDirectory("rea-toml-symlink-");
+      roots.push(home);
+      const configPath = join(home, ".codex/config.toml");
+      await mkdir(dirname(configPath), { recursive: true });
+      await symlink(join(home, "missing-config.toml"), configPath);
 
-    expect(
-      await configureClientConfiguration({
-        name: "codex",
-        configPath,
-        format: "toml",
-      }),
-    ).toEqual({ status: "failed", reason: "path" });
-    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
-    await expect(
-      readFile(`${configPath}.rea.backup`, "utf8"),
-    ).rejects.toThrow();
-  });
+      expect(
+        await configureClientConfiguration({
+          name: "codex",
+          configPath,
+          format: "toml",
+        }),
+      ).toEqual({ status: "failed", reason: "path" });
+      expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+      await expect(
+        readFile(`${configPath}.rea.backup`, "utf8"),
+      ).rejects.toThrow();
+    },
+  );
 });
 
 describe("Grok Build server table edits", () => {
@@ -1415,7 +1422,7 @@ describe("Codex configuration comments", () => {
 });
 
 describe("managed data purge root validation", () => {
-  it.each(["existing", "dangling"] as const)(
+  it.skipIf(!symbolicLinksAvailable).each(["existing", "dangling"] as const)(
     "retains cache and state when the managed-root symlink is %s",
     async (targetState) => {
       const root = await createTestTempDirectory("rea-uninstall-data-root-");
@@ -1475,42 +1482,45 @@ describe("managed data purge root validation", () => {
     expect(await readFile(managedRoot, "utf8")).toBe("unrelated file");
   });
 
-  it("purges ordinary managed data through a legitimate home directory link", async () => {
-    const root = await createTestTempDirectory("rea-uninstall-home-link-");
-    roots.push(root);
-    const home = join(root, "actual-home");
-    const linkedHome = join(root, "linked-home");
-    const managedRoot = join(home, ".rea");
-    for (const name of ["cache", "state"]) {
-      await mkdir(join(managedRoot, name), { recursive: true });
-      await writeFile(join(managedRoot, name, "data.txt"), "managed data");
-    }
-    await writeFile(join(managedRoot, "keep.txt"), "other data");
-    await symlink(
-      home,
-      linkedHome,
-      process.platform === "win32" ? "junction" : "dir",
-    );
-
-    const result = await runUninstall(
-      true,
-      systemUninstallHost(linkedHome, undefined, {}),
-    );
-
-    expect(result.status).toBe("complete");
-    for (const name of ["cache", "state"]) {
-      expect(result.items).toContainEqual(
-        expect.objectContaining({ name, status: "removed" }),
+  it.skipIf(!symbolicLinksAvailable)(
+    "purges ordinary managed data through a legitimate home directory link",
+    async () => {
+      const root = await createTestTempDirectory("rea-uninstall-home-link-");
+      roots.push(root);
+      const home = join(root, "actual-home");
+      const linkedHome = join(root, "linked-home");
+      const managedRoot = join(home, ".rea");
+      for (const name of ["cache", "state"]) {
+        await mkdir(join(managedRoot, name), { recursive: true });
+        await writeFile(join(managedRoot, name, "data.txt"), "managed data");
+      }
+      await writeFile(join(managedRoot, "keep.txt"), "other data");
+      await symlink(
+        home,
+        linkedHome,
+        process.platform === "win32" ? "junction" : "dir",
       );
-      await expect(lstat(join(managedRoot, name))).rejects.toMatchObject({
-        code: "ENOENT",
-      });
-    }
-    expect((await lstat(linkedHome)).isSymbolicLink()).toBe(true);
-    expect(await readFile(join(managedRoot, "keep.txt"), "utf8")).toBe(
-      "other data",
-    );
-  });
+
+      const result = await runUninstall(
+        true,
+        systemUninstallHost(linkedHome, undefined, {}),
+      );
+
+      expect(result.status).toBe("complete");
+      for (const name of ["cache", "state"]) {
+        expect(result.items).toContainEqual(
+          expect.objectContaining({ name, status: "removed" }),
+        );
+        await expect(lstat(join(managedRoot, name))).rejects.toMatchObject({
+          code: "ENOENT",
+        });
+      }
+      expect((await lstat(linkedHome)).isSymbolicLink()).toBe(true);
+      expect(await readFile(join(managedRoot, "keep.txt"), "utf8")).toBe(
+        "other data",
+      );
+    },
+  );
 
   it("reports root inspection failure without removing managed data", async () => {
     const home = await createTestTempDirectory("rea-uninstall-data-denied-");
@@ -1555,48 +1565,51 @@ describe("managed data purge root validation", () => {
 });
 
 describe("client configuration filesystem removal", () => {
-  it("uninstalls only owned entries and refuses purge symlinks", async () => {
-    const home = await createTestTempDirectory("rea-uninstall-");
-    roots.push(home);
-    const cursor = join(home, ".cursor/mcp.json");
-    const skill = join(
-      home,
-      ".agents/skills/reverse-engineer-anything/SKILL.md",
-    );
-    await mkdir(dirname(cursor), { recursive: true });
-    await mkdir(dirname(skill), { recursive: true });
-    await writeFile(
-      cursor,
-      JSON.stringify({
-        mcpServers: {
-          rea: { command: PRODUCT_IDENTITY.cliBinary, args: ["mcp"] },
-          other: { command: "other" },
-        },
-      }),
-    );
-    await writeFile(skill, ownedSkillManifest);
-    await mkdir(join(home, ".rea"), { recursive: true });
-    await import("node:fs/promises").then(({ symlink }) =>
-      symlink(home, join(home, ".rea/cache")),
-    );
-    const first = await runUninstall(true, systemUninstallHost(home));
-    expect(first.status).toBe("complete");
-    expect(JSON.parse(await readFile(cursor, "utf8"))).toEqual({
-      mcpServers: { other: { command: "other" } },
-    });
-    await expect(readFile(skill, "utf8")).rejects.toThrow();
-    expect(first.items).toContainEqual(
-      expect.objectContaining({
-        name: "cache",
-        status: "retained",
-        detail:
-          "REA did not remove this item because its managed path is a symbolic link. Verify the link target before removing it manually.",
-      }),
-    );
-    expect((await runUninstall(true, systemUninstallHost(home))).status).toBe(
-      "complete",
-    );
-  });
+  it.skipIf(!symbolicLinksAvailable)(
+    "uninstalls only owned entries and refuses purge symlinks",
+    async () => {
+      const home = await createTestTempDirectory("rea-uninstall-");
+      roots.push(home);
+      const cursor = join(home, ".cursor/mcp.json");
+      const skill = join(
+        home,
+        ".agents/skills/reverse-engineer-anything/SKILL.md",
+      );
+      await mkdir(dirname(cursor), { recursive: true });
+      await mkdir(dirname(skill), { recursive: true });
+      await writeFile(
+        cursor,
+        JSON.stringify({
+          mcpServers: {
+            rea: { command: PRODUCT_IDENTITY.cliBinary, args: ["mcp"] },
+            other: { command: "other" },
+          },
+        }),
+      );
+      await writeFile(skill, ownedSkillManifest);
+      await mkdir(join(home, ".rea"), { recursive: true });
+      await import("node:fs/promises").then(({ symlink }) =>
+        symlink(home, join(home, ".rea/cache")),
+      );
+      const first = await runUninstall(true, systemUninstallHost(home));
+      expect(first.status).toBe("complete");
+      expect(JSON.parse(await readFile(cursor, "utf8"))).toEqual({
+        mcpServers: { other: { command: "other" } },
+      });
+      await expect(readFile(skill, "utf8")).rejects.toThrow();
+      expect(first.items).toContainEqual(
+        expect.objectContaining({
+          name: "cache",
+          status: "retained",
+          detail:
+            "REA did not remove this item because its managed path is a symbolic link. Verify the link target before removing it manually.",
+        }),
+      );
+      expect((await runUninstall(true, systemUninstallHost(home))).status).toBe(
+        "complete",
+      );
+    },
+  );
 
   it("removes emptied skill directories and keeps ones with user files", async () => {
     const home = await createTestTempDirectory("rea-uninstall-skill-dirs-");
@@ -1629,91 +1642,98 @@ describe("client configuration filesystem removal", () => {
     expect(await readFile(join(claude, "notes.md"), "utf8")).toBe("user");
   });
 
-  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
-    "reports an emptied skill directory that cannot be removed",
-    async () => {
-      const home = await createTestTempDirectory("rea-uninstall-skill-perm-");
-      roots.push(home);
-      const parent = join(home, ".agents/skills");
-      const root = join(parent, "reverse-engineer-anything");
-      await mkdir(join(root, "references"), { recursive: true });
-      await writeFile(join(root, "SKILL.md"), ownedSkillManifest);
-      await chmod(parent, 0o555);
-      try {
-        const result = await runUninstall(
-          false,
-          systemUninstallHost(home, undefined, { HOME: home }),
-        );
-        expect(result.status).toBe("failed");
-        expect(result.items).toContainEqual(
-          expect.objectContaining({
-            name: "skill",
-            status: "failed",
-            detail: expect.stringContaining(
-              `Managed skill directory could not be removed: ${root}.`,
-            ),
-          }),
-        );
-      } finally {
-        await chmod(parent, 0o755);
-      }
-    },
-  );
+  it.skipIf(
+    !symbolicLinksAvailable ||
+      process.platform === "win32" ||
+      process.getuid?.() === 0,
+  )("reports an emptied skill directory that cannot be removed", async () => {
+    const home = await createTestTempDirectory("rea-uninstall-skill-perm-");
+    roots.push(home);
+    const parent = join(home, ".agents/skills");
+    const root = join(parent, "reverse-engineer-anything");
+    await mkdir(join(root, "references"), { recursive: true });
+    await writeFile(join(root, "SKILL.md"), ownedSkillManifest);
+    await chmod(parent, 0o555);
+    try {
+      const result = await runUninstall(
+        false,
+        systemUninstallHost(home, undefined, { HOME: home }),
+      );
+      expect(result.status).toBe("failed");
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "skill",
+          status: "failed",
+          detail: expect.stringContaining(
+            `Managed skill directory could not be removed: ${root}.`,
+          ),
+        }),
+      );
+    } finally {
+      await chmod(parent, 0o755);
+    }
+  });
 });
 
 describe("uninstall configuration symlink ownership", () => {
-  it("removes an owned entry through a symlink without replacing it", async () => {
-    const home = await createTestTempDirectory("rea-uninstall-symlink-");
-    roots.push(home);
-    const configPath = join(home, ".cursor/mcp.json");
-    const targetPath = join(home, "managed-mcp.json");
-    const original = JSON.stringify({
-      mcpServers: {
-        rea: { command: "rea", args: ["mcp"] },
-        other: { command: "other" },
-      },
-    });
-    await mkdir(dirname(configPath), { recursive: true });
-    await writeFile(targetPath, original);
-    await symlink(targetPath, configPath);
+  it.skipIf(!symbolicLinksAvailable)(
+    "removes an owned entry through a symlink without replacing it",
+    async () => {
+      const home = await createTestTempDirectory("rea-uninstall-symlink-");
+      roots.push(home);
+      const configPath = join(home, ".cursor/mcp.json");
+      const targetPath = join(home, "managed-mcp.json");
+      const original = JSON.stringify({
+        mcpServers: {
+          rea: { command: "rea", args: ["mcp"] },
+          other: { command: "other" },
+        },
+      });
+      await mkdir(dirname(configPath), { recursive: true });
+      await writeFile(targetPath, original);
+      await symlink(targetPath, configPath);
 
-    const result = await runUninstall(false, systemUninstallHost(home));
-    expect(result.status).toBe("complete");
-    expect(result.items).toContainEqual(
-      expect.objectContaining({
+      const result = await runUninstall(false, systemUninstallHost(home));
+      expect(result.status).toBe("complete");
+      expect(result.items).toContainEqual(
+        expect.objectContaining({
+          name: "cursor",
+          status: "removed",
+          configuration_path: configPath,
+        }),
+      );
+      expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+      expect(await readFile(`${configPath}.rea.backup`, "utf8")).toBe(original);
+      expect(JSON.parse(await readFile(targetPath, "utf8"))).toEqual({
+        mcpServers: { other: { command: "other" } },
+      });
+    },
+  );
+
+  it.skipIf(!symbolicLinksAvailable)(
+    "fails before mutation when an uninstall config symlink is dangling",
+    async () => {
+      const home = await createTestTempDirectory("rea-uninstall-symlink-");
+      roots.push(home);
+      const configPath = join(home, ".cursor/mcp.json");
+      await mkdir(dirname(configPath), { recursive: true });
+      await symlink(join(home, "missing-mcp.json"), configPath);
+
+      const result = await runUninstall(false, systemUninstallHost(home));
+      expect(result.status).toBe("failed");
+      expect(result.items).toContainEqual({
         name: "cursor",
-        status: "removed",
+        status: "failed",
         configuration_path: configPath,
-      }),
-    );
-    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
-    expect(await readFile(`${configPath}.rea.backup`, "utf8")).toBe(original);
-    expect(JSON.parse(await readFile(targetPath, "utf8"))).toEqual({
-      mcpServers: { other: { command: "other" } },
-    });
-  });
-
-  it("fails before mutation when an uninstall config symlink is dangling", async () => {
-    const home = await createTestTempDirectory("rea-uninstall-symlink-");
-    roots.push(home);
-    const configPath = join(home, ".cursor/mcp.json");
-    await mkdir(dirname(configPath), { recursive: true });
-    await symlink(join(home, "missing-mcp.json"), configPath);
-
-    const result = await runUninstall(false, systemUninstallHost(home));
-    expect(result.status).toBe("failed");
-    expect(result.items).toContainEqual({
-      name: "cursor",
-      status: "failed",
-      configuration_path: configPath,
-      detail:
-        "Configuration path could not be safely verified. Check its permissions and, if it is a symbolic link, verify that the link resolves to a regular file owned by the current user, then rerun uninstall.",
-    });
-    expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
-    await expect(
-      readFile(`${configPath}.rea.backup`, "utf8"),
-    ).rejects.toThrow();
-  });
+        detail:
+          "Configuration path could not be safely verified. Check its permissions and, if it is a symbolic link, verify that the link resolves to a regular file owned by the current user, then rerun uninstall.",
+      });
+      expect((await lstat(configPath)).isSymbolicLink()).toBe(true);
+      await expect(
+        readFile(`${configPath}.rea.backup`, "utf8"),
+      ).rejects.toThrow();
+    },
+  );
 });
 
 describe("uninstall registration ownership preflight", () => {

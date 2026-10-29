@@ -281,7 +281,10 @@ process.stdin.on("data", (chunk) => {
     {
       command: process.execPath,
       args: ["-e", script],
-      env: {},
+      env:
+        process.platform === "win32"
+          ? { SystemRoot: process.env.SystemRoot ?? "C:\\Windows" }
+          : {},
       mode: "attached",
       timeoutMs: 10_000,
     },

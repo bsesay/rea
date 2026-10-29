@@ -1,3 +1,4 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -9,7 +10,7 @@ import { execFileOutput } from "../../../src/process/ExecFileOutput.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { cliTest } from "../../support/cli/cliFixture.js";
 
-cliTest(
+cliTest.skipIf(!noFollowOpenSupported())(
   "imports a legacy subtree of a Git checkout with its own source facts",
   async ({ cli }) => {
     const repository = await createTestTempDirectory("rea-reference-legacy-");

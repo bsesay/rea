@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   mkdir,
   readFile,
@@ -25,35 +26,38 @@ describe("Electron file scope", () => {
     expect(await authorizedElectronFile(pathToFileURL(path).href)).toBe(path);
   });
 
-  it("accepts explicit canonical local files and rejects remote or malformed URLs", async () => {
-    const base = await createTestTempDirectory("rea-electron-scope-");
-    const root = join(base, "root");
-    const outside = join(base, "outside");
-    await mkdir(root);
-    await mkdir(outside);
-    const allowed = join(root, "index.html");
-    const denied = join(outside, "secret.html");
-    await writeFile(allowed, "allowed");
-    await writeFile(denied, "denied");
-    await symlink(denied, join(root, "escape.html"));
-    expect(await authorizedElectronFile(pathToFileURL(allowed).href)).toBe(
-      allowed,
-    );
-    expect(await authorizedElectronFile(pathToFileURL(denied).href)).toBe(
-      denied,
-    );
-    expect(
-      await authorizedElectronFile(
-        pathToFileURL(join(root, "escape.html")).href,
-      ),
-    ).toBe(denied);
-    expect(
-      await authorizedElectronFile("file://server/share/index.html"),
-    ).toBeUndefined();
-    expect(
-      await authorizedElectronFile("file:///tmp/root%2Findex.html"),
-    ).toBeUndefined();
-  });
+  it.skipIf(!symbolicLinksAvailable)(
+    "accepts explicit canonical local files and rejects remote or malformed URLs",
+    async () => {
+      const base = await createTestTempDirectory("rea-electron-scope-");
+      const root = join(base, "root");
+      const outside = join(base, "outside");
+      await mkdir(root);
+      await mkdir(outside);
+      const allowed = join(root, "index.html");
+      const denied = join(outside, "secret.html");
+      await writeFile(allowed, "allowed");
+      await writeFile(denied, "denied");
+      await symlink(denied, join(root, "escape.html"));
+      expect(await authorizedElectronFile(pathToFileURL(allowed).href)).toBe(
+        allowed,
+      );
+      expect(await authorizedElectronFile(pathToFileURL(denied).href)).toBe(
+        denied,
+      );
+      expect(
+        await authorizedElectronFile(
+          pathToFileURL(join(root, "escape.html")).href,
+        ),
+      ).toBe(denied);
+      expect(
+        await authorizedElectronFile("file://server/share/index.html"),
+      ).toBeUndefined();
+      expect(
+        await authorizedElectronFile("file:///tmp/root%2Findex.html"),
+      ).toBeUndefined();
+    },
+  );
 
   it("resolves regular files Electron serves from inside an ASAR archive", async () => {
     const root = await createTestTempDirectory("rea-electron-asar-scope-");

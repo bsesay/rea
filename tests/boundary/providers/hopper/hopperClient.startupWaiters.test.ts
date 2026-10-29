@@ -1,3 +1,4 @@
+const unixSocketTest = it.skipIf(process.platform === "win32");
 import { access } from "node:fs/promises";
 
 import { expect, it, vi } from "vitest";
@@ -15,101 +16,115 @@ import {
   trackHopperClient,
 } from "./hopperClient.fixture.js";
 
-it("preserves a warm provider when an already cancelled caller joins", async () => {
-  const launcher = new HopperFixtureLauncher();
-  const client = trackHopperClient(new HopperClient({ launcher }));
-  await expect(client.start()).resolves.toMatchObject({ ok: true });
-  const controller = new AbortController();
-  const reason = { source: "caller", opaque: 7 };
-  controller.abort(reason);
-  const joined = await client.start(controller.signal);
-  expect(joined.ok).toBe(false);
-  if (joined.ok) throw new Error("Expected cancellation");
-  expect(joined.error).toBeInstanceOf(HopperCancelledError);
-  expect(joined.error.cause).toBe(reason);
-  expect(client.isReady()).toBe(true);
-  expect(client.operationHealth()).toMatchObject({ state: "idle" });
-  await expect(
-    client.callTool("echo", { value: "live caller" }),
-  ).resolves.toEqual({
-    ok: true,
-    value: { value: "live caller" },
-  });
-  expect(launcher.processes).toHaveLength(1);
-});
-
-it("reports provider closure to live startup callers without cancelling their signals", async () => {
-  const launcher = new HopperFixtureLauncher(undefined, "quiet", "gated");
-  const client = trackHopperClient(
-    new HopperClient({ launcher, startupTimeoutMs: 10_000 }),
-  );
-  const first = new AbortController();
-  const second = new AbortController();
-  const waits = [client.start(first.signal), client.start(second.signal)];
-  await launcher.waitForRequest("health");
-  await expect(client.close()).resolves.toEqual({ ok: true, value: null });
-  for (const waiting of waits)
-    await expect(waiting).resolves.toMatchObject({
-      ok: false,
-      error: {
-        _tag: "HopperProtocolError",
-        message: "Hopper session closed during startup",
-      },
-    });
-  expect(first.signal.aborted).toBe(false);
-  expect(second.signal.aborted).toBe(false);
-  expect(client.isReady()).toBe(false);
-});
-
-it("retains the final caller's cleanup failure and blocks replacement until close succeeds", async () => {
-  const fixture = new HopperFixtureLauncher();
-  const controller = new AbortController();
-  let allowCleanup = false;
-  const client = trackHopperClient(
-    new HopperClient({
-      startupTimeoutMs: 10_000,
-      launcher: {
-        async launch(session) {
-          const launched = await fixture.launch(session);
-          if (!launched.ok) return launched;
-          if (fixture.processes.length === 1) controller.abort();
-          return ok({
-            ...launched.value,
-            cleanup: async () =>
-              allowCleanup
-                ? launched.value.cleanup()
-                : { cleaned: false as const, reason: "Fixture cleanup denied" },
-          });
-        },
-      },
-    }),
-  );
-  try {
-    const first = await client.start(controller.signal);
-    expect(first).toMatchObject({
-      ok: false,
-      error: { cleanupIncomplete: true },
-    });
-    if (first.ok) throw new Error("Expected retained cleanup");
-    const retry = await client.start();
-    if (retry.ok) throw new Error("Unexpected replacement startup");
-    expect(retry.error).toBe(first.error);
-    expect(fixture.processes).toHaveLength(1);
-    await expect(access(fixture.directories[0] ?? "")).resolves.toBeUndefined();
-    allowCleanup = true;
-    await expect(client.close()).resolves.toEqual({ ok: true, value: null });
-    await expect(access(fixture.directories[0] ?? "")).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+unixSocketTest(
+  "preserves a warm provider when an already cancelled caller joins",
+  async () => {
+    const launcher = new HopperFixtureLauncher();
+    const client = trackHopperClient(new HopperClient({ launcher }));
     await expect(client.start()).resolves.toMatchObject({ ok: true });
-    expect(fixture.processes).toHaveLength(2);
-  } finally {
-    allowCleanup = true;
-    await client.close();
-  }
-});
+    const controller = new AbortController();
+    const reason = { source: "caller", opaque: 7 };
+    controller.abort(reason);
+    const joined = await client.start(controller.signal);
+    expect(joined.ok).toBe(false);
+    if (joined.ok) throw new Error("Expected cancellation");
+    expect(joined.error).toBeInstanceOf(HopperCancelledError);
+    expect(joined.error.cause).toBe(reason);
+    expect(client.isReady()).toBe(true);
+    expect(client.operationHealth()).toMatchObject({ state: "idle" });
+    await expect(
+      client.callTool("echo", { value: "live caller" }),
+    ).resolves.toEqual({
+      ok: true,
+      value: { value: "live caller" },
+    });
+    expect(launcher.processes).toHaveLength(1);
+  },
+);
 
-it.each([0, 1])(
+unixSocketTest(
+  "reports provider closure to live startup callers without cancelling their signals",
+  async () => {
+    const launcher = new HopperFixtureLauncher(undefined, "quiet", "gated");
+    const client = trackHopperClient(
+      new HopperClient({ launcher, startupTimeoutMs: 10_000 }),
+    );
+    const first = new AbortController();
+    const second = new AbortController();
+    const waits = [client.start(first.signal), client.start(second.signal)];
+    await launcher.waitForRequest("health");
+    await expect(client.close()).resolves.toEqual({ ok: true, value: null });
+    for (const waiting of waits)
+      await expect(waiting).resolves.toMatchObject({
+        ok: false,
+        error: {
+          _tag: "HopperProtocolError",
+          message: "Hopper session closed during startup",
+        },
+      });
+    expect(first.signal.aborted).toBe(false);
+    expect(second.signal.aborted).toBe(false);
+    expect(client.isReady()).toBe(false);
+  },
+);
+
+unixSocketTest(
+  "retains the final caller's cleanup failure and blocks replacement until close succeeds",
+  async () => {
+    const fixture = new HopperFixtureLauncher();
+    const controller = new AbortController();
+    let allowCleanup = false;
+    const client = trackHopperClient(
+      new HopperClient({
+        startupTimeoutMs: 10_000,
+        launcher: {
+          async launch(session) {
+            const launched = await fixture.launch(session);
+            if (!launched.ok) return launched;
+            if (fixture.processes.length === 1) controller.abort();
+            return ok({
+              ...launched.value,
+              cleanup: async () =>
+                allowCleanup
+                  ? launched.value.cleanup()
+                  : {
+                      cleaned: false as const,
+                      reason: "Fixture cleanup denied",
+                    },
+            });
+          },
+        },
+      }),
+    );
+    try {
+      const first = await client.start(controller.signal);
+      expect(first).toMatchObject({
+        ok: false,
+        error: { cleanupIncomplete: true },
+      });
+      if (first.ok) throw new Error("Expected retained cleanup");
+      const retry = await client.start();
+      if (retry.ok) throw new Error("Unexpected replacement startup");
+      expect(retry.error).toBe(first.error);
+      expect(fixture.processes).toHaveLength(1);
+      await expect(
+        access(fixture.directories[0] ?? ""),
+      ).resolves.toBeUndefined();
+      allowCleanup = true;
+      await expect(client.close()).resolves.toEqual({ ok: true, value: null });
+      await expect(access(fixture.directories[0] ?? "")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(client.start()).resolves.toMatchObject({ ok: true });
+      expect(fixture.processes).toHaveLength(2);
+    } finally {
+      allowCleanup = true;
+      await client.close();
+    }
+  },
+);
+
+unixSocketTest.each([0, 1])(
   "cancels Hopper startup caller %s independently of its peer",
   async (cancelledIndex) => {
     let entered: (() => void) | undefined;
@@ -170,7 +185,9 @@ it.each([0, 1])(
   },
 );
 
-it.each(["cancelled", "rejected"] as const)(
+it
+  .skipIf(process.platform === "win32")
+  .each(["cancelled", "rejected"] as const)(
   "owns Hopper final startup cleanup when lineage is %s",
   async (stage) => {
     let entered: (() => void) | undefined;
@@ -230,76 +247,84 @@ it.each(["cancelled", "rejected"] as const)(
   },
 );
 
-it("keeps a post-connect launcher exit ahead of cancellation during lineage finalization", async () => {
-  let entered: (() => void) | undefined;
-  let release: (() => void) | undefined;
-  const pending = new Promise<void>((resolve) => {
-    entered = resolve;
-  });
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const original = ProviderRunLineage.prototype.observe;
-  const observe = vi.spyOn(ProviderRunLineage.prototype, "observe");
-  observe.mockImplementationOnce(async function (
-    this: ProviderRunLineage,
-    launch,
-  ) {
-    entered?.();
-    await gate;
-    await original.call(this, launch);
-  });
-  const launcher = new HopperFixtureLauncher();
-  const client = trackHopperClient(new HopperClient({ launcher }));
-  const controller = new AbortController();
-  const starting = client.start(controller.signal);
-  try {
-    await pending;
-    const child = launcher.processes[0];
-    if (child === undefined) throw new Error("Missing fixture process");
-    child.kill("SIGKILL");
-    expect(await waitForExit(child, 5_000)).toBe(true);
-    controller.abort({ source: "after launcher exit" });
-    release?.();
-
-    const result = await starting;
-    expect(result).toMatchObject({
-      ok: false,
-      error: { _tag: "HopperProcessError", exitCode: null },
+unixSocketTest(
+  "keeps a post-connect launcher exit ahead of cancellation during lineage finalization",
+  async () => {
+    let entered: (() => void) | undefined;
+    let release: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      entered = resolve;
     });
-    if (result.ok) throw new Error("Expected launcher exit failure");
-    expect(result.error).toBeInstanceOf(HopperProcessError);
-    expect((result.error as HopperProcessError).launcherFailure).toMatchObject({
-      exit_code: null,
-      signal: "SIGKILL",
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
     });
-  } finally {
-    release?.();
-    await starting;
-  }
-});
+    const original = ProviderRunLineage.prototype.observe;
+    const observe = vi.spyOn(ProviderRunLineage.prototype, "observe");
+    observe.mockImplementationOnce(async function (
+      this: ProviderRunLineage,
+      launch,
+    ) {
+      entered?.();
+      await gate;
+      await original.call(this, launch);
+    });
+    const launcher = new HopperFixtureLauncher();
+    const client = trackHopperClient(new HopperClient({ launcher }));
+    const controller = new AbortController();
+    const starting = client.start(controller.signal);
+    try {
+      await pending;
+      const child = launcher.processes[0];
+      if (child === undefined) throw new Error("Missing fixture process");
+      child.kill("SIGKILL");
+      expect(await waitForExit(child, 5_000)).toBe(true);
+      controller.abort({ source: "after launcher exit" });
+      release?.();
 
-it("keeps an unstarted client reusable after an already cancelled startup wait", async () => {
-  const launcher = new HopperFixtureLauncher();
-  const client = trackHopperClient(
-    new HopperClient({ launcher, startupTimeoutMs: 30_000 }),
-  );
-  const controller = new AbortController();
-  controller.abort();
+      const result = await starting;
+      expect(result).toMatchObject({
+        ok: false,
+        error: { _tag: "HopperProcessError", exitCode: null },
+      });
+      if (result.ok) throw new Error("Expected launcher exit failure");
+      expect(result.error).toBeInstanceOf(HopperProcessError);
+      expect(
+        (result.error as HopperProcessError).launcherFailure,
+      ).toMatchObject({
+        exit_code: null,
+        signal: "SIGKILL",
+      });
+    } finally {
+      release?.();
+      await starting;
+    }
+  },
+);
 
-  const result = await client.start(controller.signal);
+unixSocketTest(
+  "keeps an unstarted client reusable after an already cancelled startup wait",
+  async () => {
+    const launcher = new HopperFixtureLauncher();
+    const client = trackHopperClient(
+      new HopperClient({ launcher, startupTimeoutMs: 30_000 }),
+    );
+    const controller = new AbortController();
+    controller.abort();
 
-  expect(result.ok).toBe(false);
-  if (!result.ok) expect(result.error._tag).toBe("HopperCancelledError");
-  expect(launcher.processes).toHaveLength(0);
-  expect(client.isReady()).toBe(false);
-  expect(client.operationHealth()).toMatchObject({ state: "idle" });
-  await expect(
-    client.callTool("echo", { value: "live caller" }),
-  ).resolves.toEqual({
-    ok: true,
-    value: { value: "live caller" },
-  });
-  expect(launcher.processes).toHaveLength(1);
-  expect(client.isReady()).toBe(true);
-});
+    const result = await client.start(controller.signal);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error._tag).toBe("HopperCancelledError");
+    expect(launcher.processes).toHaveLength(0);
+    expect(client.isReady()).toBe(false);
+    expect(client.operationHealth()).toMatchObject({ state: "idle" });
+    await expect(
+      client.callTool("echo", { value: "live caller" }),
+    ).resolves.toEqual({
+      ok: true,
+      value: { value: "live caller" },
+    });
+    expect(launcher.processes).toHaveLength(1);
+    expect(client.isReady()).toBe(true);
+  },
+);

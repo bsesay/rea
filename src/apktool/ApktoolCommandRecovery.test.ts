@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createTestTempDirectory } from "../../tests/fixtures/temporaryDirectory.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { createDeferred } from "../../tests/fixtures/binarySession.js";
@@ -25,9 +25,10 @@ afterEach(() => {
   vi.mocked(prepareOwnedCommand).mockReset().mockResolvedValue(undefined);
   vi.useRealTimers();
 });
+const authoredCommand = resolve("/authored/apktool");
 const provider = () =>
   new ApktoolProvider({
-    environment: { REA_APKTOOL_COMMAND: "/authored/apktool" },
+    environment: { REA_APKTOOL_COMMAND: authoredCommand },
   });
 const version = {
   stdout: { text: "2.9.3\n" },
@@ -452,13 +453,13 @@ it.each([
           path,
         });
         expect(result.error.message).toContain(path);
-        expect(result.error.message).not.toContain("/authored/apktool");
+        expect(result.error.message).not.toContain(authoredCommand);
       } else
         expect(result.error).toMatchObject({
           _tag: "ProviderAdapterError",
           diagnostics: {
             target_path: path,
-            selected_command: "/authored/apktool",
+            selected_command: authoredCommand,
           },
         });
       expect(result.error.capturedOutput).toMatchObject(

@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { isCallToolResult } from "@modelcontextprotocol/server";
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 import { z } from "zod";
 
 import { GENERATED_MCP_TOOL_CATALOG } from "../../fixtures/mcpToolCatalog.js";
@@ -26,13 +26,15 @@ const resultSchema = z.object({
 });
 
 it("preserves full advertised schemas and handler meaning when presentation order changes", async () => {
+  const controller = new AbortController();
+  onTestFinished(() => controller.abort());
   const { stdout } = await execute(process.execPath, [fixture, "reversed"], {
     env: {
       ...process.env,
       REA_MCP_INPUT_SCHEMA_PROFILE: "full",
       REA_MCP_OUTPUT_SCHEMA_PROFILE: "full",
     },
-    timeout: 20_000,
+    signal: controller.signal,
     maxBuffer: 16 * 1024 * 1024,
   });
   const result = resultSchema.parse(JSON.parse(stdout));

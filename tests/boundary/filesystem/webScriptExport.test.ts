@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { execFile } from "node:child_process";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
@@ -11,7 +12,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { promisify } from "node:util";
 
 import {
@@ -47,6 +48,8 @@ import {
   scriptCaptureEvidenceFixture,
   scriptScenarioFixture,
 } from "../../fixtures/webScriptCapture.js";
+
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -784,29 +787,32 @@ describe("captured script final commit cancellation", () => {
 });
 
 describe("captured script selection failures", () => {
-  it("accepts a capture symlink to a regular file and preserves its selected path", async () => {
-    const { root, input, resources } = await setup();
-    const selected = join(root, "selected-capture.json");
-    await symlink(input.capture_path, selected, "file");
+  symbolicLinkTest(
+    "accepts a capture symlink to a regular file and preserves its selected path",
+    async () => {
+      const { root, input, resources } = await setup();
+      const selected = join(root, "selected-capture.json");
+      await symlink(input.capture_path, selected, "file");
 
-    const result = await exportWebScripts(
-      { ...input, capture_path: selected },
-      resources,
-    );
-    if (!result.ok) throw result.error;
-    expect(result.value.subject?.local_path).toBe(selected);
-    expect(
-      webScriptExportResultSchema.parse(result.value.normalized_result)
-        .capture_sha256,
-    ).toBe(
-      createHash("sha256")
-        .update(await readFile(input.capture_path))
-        .digest("hex"),
-    );
-    await expect(
-      access(join(input.output_directory, "manifest.json")),
-    ).resolves.toBeUndefined();
-  });
+      const result = await exportWebScripts(
+        { ...input, capture_path: selected },
+        resources,
+      );
+      if (!result.ok) throw result.error;
+      expect(result.value.subject?.local_path).toBe(selected);
+      expect(
+        webScriptExportResultSchema.parse(result.value.normalized_result)
+          .capture_sha256,
+      ).toBe(
+        createHash("sha256")
+          .update(await readFile(input.capture_path))
+          .digest("hex"),
+      );
+      await expect(
+        access(join(input.output_directory, "manifest.json")),
+      ).resolves.toBeUndefined();
+    },
+  );
 
   it
     .skipIf(process.platform === "win32")
@@ -1263,7 +1269,7 @@ it("does not isolate a permission refusal just because a differently cased peer 
   let refusals = 0;
   openMock.mockImplementation(async (...args) => {
     if (
-      String(args[0]).endsWith("/app.js") &&
+      basename(String(args[0])) === "app.js" &&
       typeof args[1] === "number" &&
       (args[1] & constants.O_EXCL) !== 0
     ) {
@@ -1322,7 +1328,7 @@ it("isolates an observed exclusive-create alias using typed facts when diagnosti
   );
   openMock.mockImplementation(async (...args) => {
     if (
-      String(args[0]).endsWith("/app.js") &&
+      basename(String(args[0])) === "app.js" &&
       typeof args[1] === "number" &&
       (args[1] & constants.O_EXCL) !== 0
     )

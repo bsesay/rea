@@ -1,4 +1,8 @@
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  installNodeExecutable,
+  nodeFixturePreload,
+} from "../../fixtures/nodeExecutable.js";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -253,7 +257,7 @@ if (response && response.error) { process.stderr.write("fixture API error"); pro
 else process.stdout.write(JSON.stringify(response));
 `,
   );
-  await chmod(fakeGh, 0o755);
+  await installNodeExecutable(fakeGh, "commonjs");
   return {
     directory,
     fakeBin,
@@ -276,6 +280,7 @@ function fixtureEnvironment(
   return {
     ...process.env,
     PATH: `${fixture.fakeBin}${delimiter}${process.env.PATH ?? ""}`,
+    NODE_OPTIONS: nodeFixturePreload,
     CI_REPOSITORY: "example/rea",
     CI_JOB_TIMINGS_DIRECTORY: fixture.outputDirectory,
     CI_GH_CALLS: fixture.calls,

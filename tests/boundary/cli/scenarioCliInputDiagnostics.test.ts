@@ -101,7 +101,9 @@ for (const field of [
         ],
       },
     });
-    expect(JSON.stringify(result.json)).toContain(missing);
+    expect(result.json).toMatchObject({
+      details: { issues: [{ message: expect.stringContaining(missing) }] },
+    });
   });
 }
 

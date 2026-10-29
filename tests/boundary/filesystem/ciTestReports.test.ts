@@ -13,7 +13,7 @@ import { planTestSelection } from "../../../scripts/ci/test-selection.mjs";
 
 import { parseTestDurations } from "../../ciTestSequencer.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
-import { workflowGit } from "../../support/workflowGit.js";
+import { workflowBashCommand, workflowGit } from "../../support/workflowGit.js";
 
 const execute = promisify(execFile);
 const script = new URL("../../../scripts/ci/test-report.mjs", import.meta.url);
@@ -115,7 +115,7 @@ it("merges available failed-shard diagnostics and skips unavailable shard report
   for (const tier of ["fast", "full"]) {
     for (const shard of ["success", "failure", "cancelled", "skipped", ""]) {
       for (const source of ["success", "failure", "cancelled", "skipped", ""]) {
-        const check = execute("bash", ["-c", command], {
+        const check = execute(workflowBashCommand, ["-c", command], {
           env: {
             ...process.env,
             CODE_REQUIRED: "true",
@@ -131,7 +131,7 @@ it("merges available failed-shard diagnostics and skips unavailable shard report
     }
   }
   await expect(
-    execute("bash", ["-c", command], {
+    execute(workflowBashCommand, ["-c", command], {
       env: { ...process.env, CODE_REQUIRED: "false", SHARD_RESULT: "skipped" },
     }),
   ).resolves.toMatchObject({ stderr: "" });
@@ -366,9 +366,13 @@ it("runs the existing onboarding and Python producer guards from their selected 
   expect(scripts["check:ci:fast:tasks"]).toBe(
     "node scripts/run-turbo.mjs run typecheck lint:built format:check",
   );
-  expect(scripts["test:python"]).toContain(
-    "bridge/native/test_rea_lldb_tracer.py",
+  expect(scripts["test:python"]).toBe("node scripts/run-python-tests.mjs");
+  const pythonRunner = await readFile(
+    new URL("../../../scripts/run-python-tests.mjs", import.meta.url),
+    "utf8",
   );
+  expect(pythonRunner).toContain("bridge/native/test_rea_lldb_tracer.py");
+  expect(pythonRunner).toContain("bridge/pwndbg/test_core_context.py");
 });
 
 it("exports portable timing history and removes it on a failed, partial, or invalid rerun", async () => {

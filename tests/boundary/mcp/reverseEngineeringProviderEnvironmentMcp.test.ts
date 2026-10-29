@@ -1,3 +1,4 @@
+import { writeWindowsConsoleFixture } from "../../fixtures/windowsConsoleFixture.js";
 import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -17,7 +18,12 @@ const analysis = {
 };
 
 const writeRizin = async (directory: string, output: string): Promise<void> => {
-  const executable = join(directory, "rizin");
+  const executable = join(
+    directory,
+    process.platform === "win32" ? "rizin.exe" : "rizin",
+  );
+  if (process.platform === "win32")
+    return writeWindowsConsoleFixture(executable, `${output}\n`);
   await writeFile(executable, `#!/bin/sh\nprintf '%s\\n' '${output}'\n`);
   await chmod(executable, 0o755);
 };

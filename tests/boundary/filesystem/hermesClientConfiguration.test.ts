@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { userInfo } from "node:os";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -61,13 +61,13 @@ describe("Hermes configuration paths", () => {
         HERMES_HOME: "${PROFILE_ROOT}/agent",
         PROFILE_ROOT: "/custom",
       })?.markerPath,
-    ).toBe(join("/custom", "agent"));
+    ).toBe(resolve("/custom", "agent"));
     expect(
       hermesPath({
         HERMES_HOME: "$PROFILE_ROOT/agent",
         PROFILE_ROOT: "/custom",
       })?.markerPath,
-    ).toBe(join("/custom", "agent"));
+    ).toBe(resolve("/custom", "agent"));
     expect(hermesPath({ LOCALAPPDATA: "  " }, "win32")?.markerPath).toBe(
       join("/home/a", "AppData", "Local", "hermes"),
     );
@@ -109,7 +109,7 @@ describe("Hermes configuration paths", () => {
   it("honours HERMES_HOME and Hermes's data-directory suffix", () => {
     expect(
       hermesPath({ HERMES_HOME: join("/srv", "hermes") })?.configPath,
-    ).toBe(join("/srv", "hermes", "config.yaml"));
+    ).toBe(resolve("/srv", "hermes", "config.yaml"));
     // A blank override falls through to the platform default.
     expect(hermesPath({ HERMES_HOME: "  " })?.configPath).toBe(
       join("/home/a", ".hermes", "config.yaml"),

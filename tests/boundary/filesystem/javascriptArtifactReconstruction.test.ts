@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { createHash } from "node:crypto";
 import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,6 +19,8 @@ import type {
 } from "../../../src/artifacts/ArtifactReader.js";
 import { writeJavaScriptArtifactFixture } from "../../fixtures/javascriptArtifactApplication.js";
 
+const symbolicLinkTest = it.skipIf(!symbolicLinksAvailable);
+
 it("reads local source maps as part of static artifact analysis", async () => {
   const root = await fixtureDirectory();
   const result = await reconstructJavaScriptArtifact({ input_path: root });
@@ -30,38 +33,42 @@ it("reads local source maps as part of static artifact analysis", async () => {
   );
 });
 
-it("does not follow symlinks and analyzes each local source file", async () => {
-  const root = await fixtureDirectory();
-  const outside = await createTestTempDirectory("rea-javascript-outside-");
-  const outsideFile = join(outside, "secret.js");
-  await writeFile(
-    outsideFile,
-    'fetch("https://outside-secret.invalid/credential");',
-  );
-  await symlink(outsideFile, join(root, "escape.js"));
-  const baseline = await reconstructJavaScriptArtifact({ input_path: root });
-  const additionalSource = Array.from(
-    { length: 1_000 },
-    (_value, index) => `export const value${String(index)} = ${String(index)};`,
-  ).join("\n");
-  await writeFile(join(root, "additional.js"), additionalSource);
+symbolicLinkTest(
+  "does not follow symlinks and analyzes each local source file",
+  async () => {
+    const root = await fixtureDirectory();
+    const outside = await createTestTempDirectory("rea-javascript-outside-");
+    const outsideFile = join(outside, "secret.js");
+    await writeFile(
+      outsideFile,
+      'fetch("https://outside-secret.invalid/credential");',
+    );
+    await symlink(outsideFile, join(root, "escape.js"));
+    const baseline = await reconstructJavaScriptArtifact({ input_path: root });
+    const additionalSource = Array.from(
+      { length: 1_000 },
+      (_value, index) =>
+        `export const value${String(index)} = ${String(index)};`,
+    ).join("\n");
+    await writeFile(join(root, "additional.js"), additionalSource);
 
-  const result = await reconstructJavaScriptArtifact({ input_path: root });
-  const encoded = JSON.stringify(result);
+    const result = await reconstructJavaScriptArtifact({ input_path: root });
+    const encoded = JSON.stringify(result);
 
-  expect(result.graph.coverage).toMatchObject({
-    status: "complete",
-    truncated: false,
-  });
-  expect(result.statistics.parsed_javascript_files).toBe(
-    baseline.statistics.parsed_javascript_files + 1,
-  );
-  expect(result.statistics.text_bytes_read).toBe(
-    baseline.statistics.text_bytes_read + Buffer.byteLength(additionalSource),
-  );
-  expect(encoded).not.toContain(outsideFile);
-  expect(encoded).not.toContain("outside-secret.invalid");
-});
+    expect(result.graph.coverage).toMatchObject({
+      status: "complete",
+      truncated: false,
+    });
+    expect(result.statistics.parsed_javascript_files).toBe(
+      baseline.statistics.parsed_javascript_files + 1,
+    );
+    expect(result.statistics.text_bytes_read).toBe(
+      baseline.statistics.text_bytes_read + Buffer.byteLength(additionalSource),
+    );
+    expect(encoded).not.toContain(outsideFile);
+    expect(encoded).not.toContain("outside-secret.invalid");
+  },
+);
 
 it("keeps malformed JavaScript, package metadata, and source maps as explicit unknowns", async () => {
   const root = await fixtureDirectory();

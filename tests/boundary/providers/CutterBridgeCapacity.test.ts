@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { chmod, writeFile } from "node:fs/promises";
+import { chmod, writeFile, rm } from "node:fs/promises";
 import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 
-import { expect, it } from "vitest";
+import { expect, it, onTestFinished } from "vitest";
 
 import { CutterBridgeClient } from "../../../src/cutter/CutterBridgeClient.js";
 import { CutterBridgeService } from "../../../src/cutter/CutterBridgeService.js";
 import { cutterDiscoverySchema } from "../../../src/contracts/cutterToolContracts.js";
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { cutterPrivateTemp } from "../../fixtures/cutterPrivateDirectory.js";
 
 const descriptor = async (directory: string, port: number): Promise<string> => {
   const sessionId = randomUUID();
@@ -31,14 +31,12 @@ const descriptor = async (directory: string, port: number): Promise<string> => {
 };
 
 it("reports descriptor capacity without opening candidates or claiming no live sessions", async () => {
-  const directory = await createTestTempDirectory("rea-cutter-capacity-");
+  const directory = await cutterPrivateTemp("rea-cutter-capacity-");
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await chmod(directory, 0o700);
   const selectedSession = await descriptor(directory, 1);
   for (let index = 1; index < 257; index += 1) await descriptor(directory, 1);
-  const client = new CutterBridgeClient(
-    { REA_CUTTER_BRIDGE_DIR: directory },
-    { platform: "linux" },
-  );
+  const client = new CutterBridgeClient({ REA_CUTTER_BRIDGE_DIR: directory });
   const result = await client.listSessions();
   expect(cutterDiscoverySchema.parse(result)).toMatchObject({
     sessions: [],
@@ -63,7 +61,8 @@ it("reports descriptor capacity without opening candidates or claiming no live s
 });
 
 it("bounds simultaneous socket probes while examining every admitted descriptor", async () => {
-  const directory = await createTestTempDirectory("rea-cutter-probes-");
+  const directory = await cutterPrivateTemp("rea-cutter-probes-");
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await chmod(directory, 0o700);
   const sockets = new Set<Socket>();
   let peak = 0;
@@ -82,10 +81,7 @@ it("bounds simultaneous socket probes while examining every admitted descriptor"
       throw new Error("listener missing");
     for (let index = 0; index < 24; index += 1)
       await descriptor(directory, address.port);
-    const client = new CutterBridgeClient(
-      { REA_CUTTER_BRIDGE_DIR: directory },
-      { platform: "linux" },
-    );
+    const client = new CutterBridgeClient({ REA_CUTTER_BRIDGE_DIR: directory });
     expect((await client.listSessions()).discovery_status).toBe(
       "no_live_bridge_found",
     );
@@ -99,14 +95,12 @@ it("bounds simultaneous socket probes while examining every admitted descriptor"
 });
 
 it("rejects expanded authenticated frames before dispatch and retains no cleanup owner", async () => {
-  const directory = await createTestTempDirectory("rea-cutter-frame-");
+  const directory = await cutterPrivateTemp("rea-cutter-frame-");
+  onTestFinished(() => rm(directory, { recursive: true, force: true }));
   await chmod(directory, 0o700);
   const sessionId = await descriptor(directory, 1);
   const service = new CutterBridgeService(
-    new CutterBridgeClient(
-      { REA_CUTTER_BRIDGE_DIR: directory },
-      { platform: "linux" },
-    ),
+    new CutterBridgeClient({ REA_CUTTER_BRIDGE_DIR: directory }),
   );
   const input = { session_id: sessionId, expected_generation: 0, json: false };
   const rejected = await service.execute({

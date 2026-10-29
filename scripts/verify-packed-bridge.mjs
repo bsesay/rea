@@ -20,7 +20,7 @@ export async function verifyPackedBridge({ tarball, packedFiles }) {
   // Read the packed source without extracting into the caller's leased root.
   // Only the interpreter's standard library is needed; caller-local modules
   // and site startup hooks must not replace the parser or execute here.
-  await exec("python3", [
+  await exec(process.platform === "win32" ? "python" : "python3", [
     "-I",
     "-S",
     "-c",

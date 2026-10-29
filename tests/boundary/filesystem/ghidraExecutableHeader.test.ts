@@ -99,7 +99,7 @@ it.skipIf(process.platform === "win32")(
 );
 
 it.each(["replace", "grow", "shrink", "disappear"] as const)(
-  "rejects a changed executable prefix (%s)",
+  "fails closed when executable prefix mutation is attempted (%s)",
   async (change) => {
     const root = await createTestTempDirectory("rea-header-change-");
     const path = join(root, "decompile"),
@@ -128,7 +128,10 @@ it.each(["replace", "grow", "shrink", "disappear"] as const)(
         }),
       ).toMatchObject({
         ok: false,
-        error: { _tag: "AnalysisArtifactChangedError", path },
+        error:
+          process.platform === "win32" && change === "replace"
+            ? { _tag: "AnalysisAccessDeniedError", path: replacement }
+            : { _tag: "AnalysisArtifactChangedError", path },
       });
     } finally {
       await resources.close();

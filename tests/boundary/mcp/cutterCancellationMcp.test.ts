@@ -17,12 +17,12 @@ import { toolContract } from "../../../src/contracts/toolContracts.js";
 import { registerCutterTools } from "../../../src/server/registerCutterTools.js";
 import { createToolResultDelivery } from "../../../src/server/toolResult.js";
 import { silentLogger } from "../../../src/logger.js";
-import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
+import { createCutterTestDirectory } from "../../fixtures/cutterPrivateDirectory.js";
 
 it.skipIf(process.platform === "win32")(
   "closes cancelled discovery probes, stops queued probes and reuses the MCP connection",
   async () => {
-    const directory = await createTestTempDirectory("rea-cutter-discovery-");
+    const directory = await createCutterTestDirectory("rea-cutter-discovery-");
     await chmod(directory, 0o700);
     const sockets = new Set<Socket>();
     let accepted = 0;
@@ -280,9 +280,9 @@ it("cancels active discovery sockets, stops queued probes and recovers on the sa
   const { join } = await import("node:path");
   const { CutterBridgeClient } =
     await import("../../../src/cutter/CutterBridgeClient.js");
-  const { createTestTempDirectory } =
-    await import("../../fixtures/temporaryDirectory.js");
-  const root = await createTestTempDirectory("rea-cutter-discovery-cancel-");
+  const { createCutterTestDirectory } =
+    await import("../../fixtures/cutterPrivateDirectory.js");
+  const root = await createCutterTestDirectory("rea-cutter-discovery-cancel-");
   const sockets = new Set<import("node:net").Socket>();
   let connections = 0;
   let ready!: () => void;
@@ -379,7 +379,7 @@ it("cancels active discovery sockets, stops queued probes and recovers on the sa
 it.skipIf(process.platform === "win32")(
   "retains a generation-error command until authenticated terminal proof",
   async () => {
-    const directory = await createTestTempDirectory(
+    const directory = await createCutterTestDirectory(
       "rea-cutter-generation-proof-",
     );
     await chmod(directory, 0o700);

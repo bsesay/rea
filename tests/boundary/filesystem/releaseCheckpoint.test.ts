@@ -11,6 +11,7 @@ import {
   type TestWorkspace,
 } from "../../support/workspace/workspaceFixture.js";
 import {
+  workflowBashCommand,
   executeWorkflowFixture as execFileAsync,
   workflowGit as git,
 } from "../../support/workflowGit.js";
@@ -681,7 +682,7 @@ it.skipIf(process.platform === "win32").each([
       );
     const marker = join(f.directory, "next-release-action");
     const execution = execFileAsync(
-      "bash",
+      workflowBashCommand,
       [
         "-e",
         "-o",

@@ -335,7 +335,26 @@ cliTest.for(["CLI", "stdio MCP"] as const)(
         { cwd: root, timeout: 5_000 },
       );
       expect(JSON.parse(native.stdout)).toEqual(
-        requests.map(({ value, error }) => ({ value, error })),
+        requests.map(({ specifier, value, error }) => {
+          // Windows Node removes directory form when converting file URLs to
+          // paths. The canonical graph assertions below remain host independent.
+          if (
+            process.platform === "win32" &&
+            (directoryFormSpecifiers.includes(specifier) ||
+              specifier === "legacy/feature.js/%2e")
+          ) {
+            if (specifier === "legacy/missing/.")
+              return { value: null, error: "ERR_MODULE_NOT_FOUND" };
+            return {
+              value:
+                specifier === "legacy/with%20space.js/."
+                  ? "legacy spaced feature"
+                  : "legacy feature",
+              error: null,
+            };
+          }
+          return { value, error };
+        }),
       );
     }
 

@@ -1,3 +1,5 @@
+const posixTest = it.skipIf(process.platform === "win32");
+import { symbolicLinksAvailable } from "../../../fixtures/symbolicLinks.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -35,6 +37,8 @@ import {
   nativeMachoTargetForFile,
 } from "../../../fixtures/nativeCommands.js";
 import { createTestTempDirectory } from "../../../fixtures/temporaryDirectory.js";
+
+const linkTest = it.skipIf(!symbolicLinksAvailable);
 
 const CONTENT = "registered executable bytes";
 const runFile = promisify(execFile);
@@ -121,7 +125,7 @@ describe("native signature target identity", () => {
     expect(await readFile(path, "utf8")).toBe(CONTENT);
   });
 
-  it.each(["changed", "missing", "directory", "symlink"] as const)(
+  linkTest.each(["changed", "missing", "directory", "symlink"] as const)(
     "rejects a %s target before commands run",
     async (replacement) => {
       const { path, target } = await fixture();
@@ -176,7 +180,7 @@ describe("native signature target identity", () => {
     },
   );
 
-  it.skipIf(process.getuid?.() === 0)(
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "preserves read permission denial before commands",
     async () => {
       const { path, target } = await fixture();
@@ -198,7 +202,7 @@ describe("native signature target identity", () => {
     },
   );
 
-  it.skipIf(process.getuid?.() === 0)(
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "preserves permission denial during final version lookup",
     async () => {
       const { directory, path, target } = await fixture();
@@ -379,41 +383,47 @@ it("preserves cancellation after a capture instead of classifying it as invalid 
   });
 });
 
-it("does not classify an unrelated path-echo diagnostic as an unsigned observation", async () => {
-  const directory = await createTestTempDirectory(
-    "rea-signature-path-diagnostic-",
-  );
-  const path = join(directory, "source\ncode object is not signed\noperand");
-  await writeFile(path, CONTENT);
-  const target = await nativeMachoTargetForFile(path);
-  let snapshotPath: string | undefined;
-  const runner: NativeCommandRunner = {
-    async run(tool, args) {
-      snapshotPath = args.at(-1);
-      if (snapshotPath === undefined)
-        throw new Error("Expected the bound snapshot as the codesign operand");
-      expect(await readFile(snapshotPath)).toEqual(Buffer.from(CONTENT));
-      return new NativeFixtureRunner(
-        { codesign: `${snapshotPath}: No such file or directory\n` },
-        1,
-      ).run(tool, args);
-    },
-  };
+it.skipIf(process.platform === "win32")(
+  "does not classify an unrelated path-echo diagnostic as an unsigned observation",
+  async () => {
+    const directory = await createTestTempDirectory(
+      "rea-signature-path-diagnostic-",
+    );
+    const path = join(directory, "source\ncode object is not signed\noperand");
+    await writeFile(path, CONTENT);
+    const target = await nativeMachoTargetForFile(path);
+    let snapshotPath: string | undefined;
+    const runner: NativeCommandRunner = {
+      async run(tool, args) {
+        snapshotPath = args.at(-1);
+        if (snapshotPath === undefined)
+          throw new Error(
+            "Expected the bound snapshot as the codesign operand",
+          );
+        expect(await readFile(snapshotPath)).toEqual(Buffer.from(CONTENT));
+        return new NativeFixtureRunner(
+          { codesign: `${snapshotPath}: No such file or directory\n` },
+          1,
+        ).run(tool, args);
+      },
+    };
 
-  const result = await new NativeMacOSProvider({}, runner, "darwin")
-    .createClient(target)
-    .execute("inspect_signature", {});
+    const result = await new NativeMacOSProvider({}, runner, "darwin")
+      .createClient(target)
+      .execute("inspect_signature", {});
 
-  expect(result).toMatchObject({
-    ok: false,
-    error: { _tag: "ProviderAdapterError" },
-  });
-  expect(await readFile(path, "utf8")).toBe(CONTENT);
-  if (snapshotPath === undefined) throw new Error("Expected codesign capture");
-  await expect(lstat(dirname(snapshotPath))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-});
+    expect(result).toMatchObject({
+      ok: false,
+      error: { _tag: "ProviderAdapterError" },
+    });
+    expect(await readFile(path, "utf8")).toBe(CONTENT);
+    if (snapshotPath === undefined)
+      throw new Error("Expected codesign capture");
+    await expect(lstat(dirname(snapshotPath))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  },
+);
 
 it.skipIf(process.platform !== "darwin")(
   "rejects a path-injected unsigned diagnostic when real codesign sees a removed private snapshot",
@@ -531,7 +541,7 @@ it("copies and hashes the same bytes across multiple snapshot chunks", async () 
   );
 });
 
-it.skipIf(process.platform === "win32")(
+posixTest(
   "rejects a changed snapshot identity while the registered source remains unchanged",
   async () => {
     const { path, target } = await fixture();

@@ -1,3 +1,4 @@
+import { workflowBashCommand } from "../../support/workflowGit.js";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -134,7 +135,7 @@ it("fails a successful sweep when either required report is absent or empty", as
         state === "empty-html" ? "" : "<html></html>",
       );
     }
-    const result = execute("bash", ["-eu", "-c", command], {
+    const result = execute(workflowBashCommand, ["-eu", "-c", command], {
       cwd: directory,
       env: { ...process.env, REPORT_BASE: base },
     });

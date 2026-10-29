@@ -1,7 +1,7 @@
 import { parseMcpToolError } from "../../fixtures/mcpToolError.js";
 import { ok as resultOk } from "../../../src/domain/result.js";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { describe, expect, it } from "vitest";
@@ -203,18 +203,18 @@ describe("server and catalog identity", () => {
     const aligned = createServerIdentity({
       catalog: DEFAULT_CATALOG_IDENTITY,
       startedAt: "2026-07-13T00:00:00.000Z",
-      commandPath: "/packaged/rea.mjs",
+      commandPath: resolve("/packaged/rea.mjs"),
       expected: {
         package_version: PRODUCT_IDENTITY.packageVersion,
         catalog_digest: DEFAULT_CATALOG_IDENTITY.digests.combined_sha256,
-        server_path: "/packaged/rea.mjs",
+        server_path: resolve("/packaged/rea.mjs"),
       },
     });
     expect(aligned.alignment).toMatchObject({ state: "aligned", reasons: [] });
     const stale = createServerIdentity({
       catalog: DEFAULT_CATALOG_IDENTITY,
       startedAt: "2026-07-13T00:00:00.000Z",
-      commandPath: "/packaged/rea.mjs",
+      commandPath: resolve("/packaged/rea.mjs"),
       expected: {
         package_version: "1.2.0",
         catalog_digest: "0".repeat(64),
