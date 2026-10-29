@@ -19,11 +19,17 @@ import { parseEvidence } from "../../dist/domain/evidence.js";
 const document = (path) => {
   if (path.startsWith("/nested"))
     return `<script>throw new Error("nested popup failure")</script>
-      <script>opener.postMessage("nested-ready", "*")</script>`;
+      <script>onload = () => opener.postMessage("nested-ready", "*")</script>`;
   if (path.startsWith("/popup"))
     return `<script>throw new Error("popup failure")</script>
-      <script>onmessage = e => {
-        if (e.data === "nested-ready") opener.postMessage("popup-ready", "*");
+      <script>let nestedReady = false;
+      const notifyReady = () => {
+        if (nestedReady && document.readyState === "complete")
+          opener.postMessage("popup-ready", "*");
+      };
+      onload = notifyReady;
+      onmessage = e => {
+        if (e.data === "nested-ready") { nestedReady = true; notifyReady(); }
       }; window.open("/nested");</script><iframe src="/child"></iframe>`;
   if (path.startsWith("/child")) return "child frame";
   return `<script>onmessage = e => {
@@ -65,7 +71,7 @@ const capture = async (scenario) => {
 };
 
 const assertNetwork = (result, origin) => {
-  for (const path of ["/redirect", "/popup", "/nested"])
+  for (const path of ["/redirect", "/popup", "/nested", "/child"])
     for (const kind of ["request", "response"])
       assert.equal(
         result.events.items.filter(
@@ -74,7 +80,17 @@ const assertNetwork = (result, origin) => {
         1,
         `${kind} ${path} must be captured exactly once`,
       );
-  assert.equal(result.completeness.equality_eligible, true);
+  assert.equal(
+    result.completeness.equality_eligible,
+    true,
+    JSON.stringify({
+      completeness: result.completeness,
+      limitations: result.limitations,
+      unfinished: result.events.items.filter(
+        (event) => event.kind === "request-unfinished",
+      ),
+    }),
+  );
   assert.equal(compareWithSelf(result).overall_status, "unchanged");
 };
 
@@ -185,7 +201,11 @@ export async function verifyPopupEventCoverage(executable) {
       response.end();
     } else {
       response.setHeader("Content-Type", "text/html");
-      response.end(document(request.url ?? "/"));
+      if (request.url === "/child") {
+        // Readiness must wait for the popup's frame, even when its response is slow.
+        const timer = setTimeout(() => response.end(document("/child")), 100);
+        response.once("close", () => clearTimeout(timer));
+      } else response.end(document(request.url ?? "/"));
     }
   });
   server.listen(0, "127.0.0.1");
@@ -231,6 +251,7 @@ export async function verifyPopupEventCoverage(executable) {
       initial_network: true,
       redirects: true,
       nested_popups: true,
+      delayed_iframe_load: true,
       unselected_lifecycle_absent: true,
       popup_event_gaps_explicit: true,
       incomplete_comparison_unknown: true,
