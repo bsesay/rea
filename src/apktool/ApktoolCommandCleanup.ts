@@ -12,6 +12,10 @@ import { analysisErrorWithCleanupFailure } from "../domain/analysisErrorCleanup.
 import { ProviderCleanupError } from "../domain/providerCleanupError.js";
 import { DarwinProcessOwnershipInspectionError } from "../process/DarwinProcessRunTokenReader.js";
 import { OwnedCommandFailure } from "../process/OwnedCommand.js";
+import { PrivateRuntimeRoot } from "../process/PrivateRuntimeRoot.js";
+import { analysisClientFailureForOperation } from "../providers/AnalysisClientFailure.js";
+import { err, ok } from "../domain/result.js";
+import type { ApktoolClientIdentity } from "./ApktoolConfiguration.js";
 
 interface CommandOwner {
   readonly lease: AnalysisCleanupLease;
@@ -48,6 +52,69 @@ export class ApktoolCommandCleanup {
   pendingFor(root: string): boolean {
     this.#prune();
     return [...this.#owners].some((owner) => owner.root === root);
+  }
+
+  /** Keep launcher diagnostics private until the command family is confirmed stopped. */
+  async withProbeRuntime(
+    operation: (root: string) => Promise<ApktoolClientIdentity>,
+  ): Promise<ApktoolClientIdentity> {
+    const runtime = await PrivateRuntimeRoot.create({
+      prefix: "rea-apktool-probe-",
+    });
+    const name = "inspect_apktool_client";
+    const cleanup = new ProviderCleanupError(
+      "apktool",
+      [runtime.path],
+      {},
+      { operation: name },
+    );
+    const outcome = await Promise.resolve()
+      .then(() => operation(runtime.path))
+      .then(ok, err);
+    const owner = this.#retain(
+      cleanup,
+      async () => {
+        if (this.pendingFor(runtime.path))
+          throw new Error(
+            "The probe workspace remains owned until its Apktool command stops",
+          );
+        await runtime.close();
+      },
+      undefined,
+    );
+    try {
+      await owner.lease.release();
+    } catch (cause) {
+      const failure = new ProviderCleanupError(
+        "apktool",
+        [runtime.path],
+        {
+          reason: cause instanceof Error ? cause.message : String(cause),
+          ...(outcome.ok ? { client: { version: outcome.value.version } } : {}),
+        },
+        { operation: name, cause },
+      );
+      owner.lease.bindCleanupError(failure);
+      if (outcome.ok) throw failure;
+      const primary = analysisClientFailureForOperation(
+        outcome.error,
+        "apktool",
+        name,
+      );
+      const combined = new ProviderCleanupError(
+        "apktool",
+        [...primary.cleanupResources, ...failure.cleanupResources],
+        {},
+        { operation: name, cause: new AggregateError([primary, failure]) },
+      ).bindCleanupDependencies([primary, failure]);
+      throw analysisErrorWithCleanupFailure(
+        primary.cleanupPrimary ?? primary,
+        combined,
+        name,
+      ).bindCleanupDependencies([combined]);
+    }
+    if (!outcome.ok) throw outcome.error;
+    return outcome.value;
   }
 
   retainFailure(

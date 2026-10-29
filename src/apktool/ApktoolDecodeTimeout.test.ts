@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ApktoolResourceAnalysisService } from "../application/apktool/ApktoolResourceAnalysisService.js";
@@ -100,7 +100,7 @@ it("applies the omitted 600000 ms decode deadline and a selected value on the ne
   await writeFile(path, "apk-bytes");
   installLauncher();
   const provider = new ApktoolProvider({
-    environment: { REA_APKTOOL_COMMAND: "/opt/apktool/apktool" },
+    environment: { REA_APKTOOL_COMMAND: resolve("/opt/apktool/apktool") },
   });
   try {
     const omitted = await decode(provider, path);

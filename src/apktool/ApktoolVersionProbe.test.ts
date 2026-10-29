@@ -143,6 +143,7 @@ it("keeps unresolved probe cleanup typed when the launcher overflows its output"
   expect((failure as AnalysisTimeoutError).cleanupResources).toEqual([
     "pid:7",
     "process-group:7",
+    vi.mocked(runOwnedCommand).mock.lastCall?.[0].hostEnvironment?.TEMP,
   ]);
 
   // Both provider entry points report the unresolved processes as cleanup.
@@ -161,7 +162,13 @@ it("keeps unresolved probe cleanup typed when the launcher overflows its output"
   expect(result.ok ? null : result.error.cleanupIncomplete).toBe(true);
   expect(result.ok ? null : projectAnalysisError(result.error)).toMatchObject({
     code: "cleanup_incomplete",
-    details: { resources: ["pid:7", "process-group:7"] },
+    details: {
+      resources: [
+        "pid:7",
+        "process-group:7",
+        vi.mocked(runOwnedCommand).mock.lastCall?.[0].hostEnvironment?.TEMP,
+      ],
+    },
   });
   await provider.close();
   expect(result.ok ? null : result.error.cleanupIncomplete).toBe(false);

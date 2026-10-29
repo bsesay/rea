@@ -296,6 +296,51 @@ export const inspectApktoolClient = async (
     readonly platform?: NodeJS.Platform;
   } = {},
 ): Promise<ApktoolClientIdentity> => {
+  if (options.signal?.aborted)
+    throw new AnalysisCancelledError("inspect_apktool_client", {
+      cause: options.signal.reason,
+    });
+  const identity = await cleanup.withProbeRuntime((root) =>
+    probeApktoolVersion(selection, cleanup, root, {
+      ...options,
+      environment: {
+        ...snapshotEnvironment(
+          options.environment ?? process.env,
+          options.platform ?? process.platform,
+        ),
+        TEMP: root,
+        TMP: root,
+        TMPDIR: root,
+      },
+    }),
+  );
+  if (options.signal?.aborted)
+    throw versionProbeFailure(
+      new OwnedCommandFailure(
+        "cancelled",
+        "Apktool probe cancelled during workspace cleanup",
+        null,
+        null,
+        {
+          cancellation: { reason: options.signal.reason },
+        },
+      ),
+      selection,
+      identity,
+    );
+  return identity;
+};
+
+const probeApktoolVersion = async (
+  selection: ApktoolCommandSelection,
+  cleanup: ApktoolCommandCleanup,
+  root: string,
+  options: {
+    readonly signal?: AbortSignal;
+    readonly environment?: Readonly<Record<string, string | undefined>>;
+    readonly platform?: NodeJS.Platform;
+  },
+): Promise<ApktoolClientIdentity> => {
   const {
     signal,
     environment = process.env,
@@ -397,6 +442,7 @@ export const inspectApktoolClient = async (
       cause,
       primary,
       "inspect_apktool_client",
+      root,
     );
     throw retained === primary ? failure : retained;
   }
