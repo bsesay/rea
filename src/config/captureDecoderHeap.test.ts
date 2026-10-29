@@ -146,7 +146,11 @@ it("reports the heap the selected adapter launches when decoder environment diff
     capture_path: capturePath,
     format: "har",
   });
-  const decoder = new HistoricalCaptureDecoder([launched, other], {});
+  const decoder = new HistoricalCaptureDecoder([launched, other], {
+    ...(process.platform === "win32"
+      ? { SystemRoot: process.env.SystemRoot }
+      : {}),
+  });
   try {
     vi.spyOn(launched, "command").mockImplementation(async (requestPath) => {
       const runtimePath = join(requestPath, "..");

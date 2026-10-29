@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,15 +10,12 @@ describe("Python pyc stable filesystem boundary", () => {
   it("reports non-file and malformed pyc selections as caller input errors", async () => {
     const root = await createTestTempDirectory("rea-python-pyc-files-");
     const path = join(root, "sample.pyc");
-    const alias = join(root, "alias.pyc");
     const malformed = join(root, "malformed.pyc");
     await writeFile(path, pythonPycFixture());
     await writeFile(malformed, Buffer.from("not a pyc"));
-    await symlink(path, alias);
     const service = createPythonPycService();
     for (const [candidate, reason] of [
       [root, "invalid_format"],
-      [alias, "invalid_format"],
       [malformed, "invalid_format"],
       [join(root, "missing.pyc"), "invalid_value"],
       [join(path, "child.pyc"), "invalid_value"],
@@ -58,3 +56,27 @@ describe("Python pyc stable filesystem boundary", () => {
     expect(cancelled.error._tag).toBe("AnalysisCancelledError");
   });
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "rejects a symlink at the stable pythonPyc input boundary",
+  async () => {
+    const root = await createTestTempDirectory("rea-pythonPyc-symlink-");
+    const path = join(root, "target"),
+      alias = join(root, "alias");
+    await writeFile(path, pythonPycFixture());
+    await symlink(path, alias);
+    const result = await createPythonPycService().inspect({ path: alias });
+    if (result.ok) throw new Error("Symlink input was admitted");
+    expect(result.error).toMatchObject({
+      _tag: "AnalysisInputError",
+      operation: "inspect_python_pyc",
+      issues: [
+        {
+          path: ["path"],
+          reason: "invalid_format",
+          message: expect.any(String),
+        },
+      ],
+    });
+  },
+);

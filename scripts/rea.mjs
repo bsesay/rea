@@ -131,20 +131,12 @@ if (!(await compiledRuntimeExists(runtimeFiles))) {
             void Promise.resolve()
               .then(() => closeCliJavaScriptResources())
               .then(
-                () => {
-                  process.exit(status);
-                },
+                () => exitAfterOutput(status),
                 (cleanup) => {
                   process.stderr.write(
                     `Failed to close the JavaScript analysis worker: ${cleanupFailureText(cleanup)}\n`,
                   );
-                  process.exit(
-                    stdoutClosed
-                      ? SIGPIPE_EXIT_STATUS
-                      : status === 0
-                        ? 1
-                        : status,
-                  );
+                  return exitAfterOutput(status === 0 ? 1 : status);
                 },
               );
           },
@@ -234,6 +226,32 @@ function guardClosedStdout() {
 
 function writeStdout(output) {
   if (!stdoutClosed) process.stdout.write(output);
+}
+
+// Incur's delegated writes have a void callback. A forced exit must wait for
+// those queued bytes, including cleanup diagnostics, to reach the reader.
+async function exitAfterOutput(status) {
+  await Promise.all(
+    [process.stdout, process.stderr].map(
+      (stream) =>
+        new Promise((done, reject) => {
+          if (stream.destroyed) {
+            if (stream === process.stdout && stream.errored?.code === "EPIPE")
+              stdoutClosed = true;
+            done();
+            return;
+          }
+          stream.write("", (cause) => {
+            if (stream === process.stdout && cause?.code === "EPIPE") {
+              stdoutClosed = true;
+              done();
+            } else if (cause) reject(cause);
+            else done();
+          });
+        }),
+    ),
+  );
+  process.exit(stdoutClosed ? SIGPIPE_EXIT_STATUS : status);
 }
 
 async function compiledRuntimeExists(paths) {

@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { resolve } from "node:path";
 
 const statFailures = vi.hoisted(() => new Map<string, unknown>());
 
@@ -44,7 +45,7 @@ it.each([
 ])(
   "stops CLI resource dispatch on stat failure $code and preserves its path",
   async ({ code, projectedCode, systemCode }) => {
-    const path = `/tmp/rea-stat-failure-${code}.app`;
+    const path = resolve(`/tmp/rea-stat-failure-${code}.app`);
     const cause = Object.assign(new Error(`${code}: injected stat failure`), {
       code,
     });
@@ -87,7 +88,7 @@ it.each([
 );
 
 it("rethrows an unclassified stat failure instead of treating it as a file", async () => {
-  const path = "/tmp/rea-stat-failure-opaque.app";
+  const path = resolve("/tmp/rea-stat-failure-opaque.app");
   const cause = new Error("opaque filesystem failure");
   statFailures.set(path, cause);
   const session = {

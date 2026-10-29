@@ -8,6 +8,15 @@ import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 // Runtime discovery is generated from the same canonical registrations, after
 // default identity has been recorded and before bundling. Test catalogs stay separate.
 const compiled = resolve(dirname(fileURLToPath(import.meta.url)), "../dist");
+const arguments_ = process.argv.slice(2);
+if (
+  arguments_.length !== 0 &&
+  (arguments_.length !== 2 || arguments_[0] !== "--output-directory")
+)
+  throw new Error("Usage: record-mcp-catalog.mjs [--output-directory PATH]");
+// Verification owns generated files separately from the immutable compiled inputs.
+const outputDirectory =
+  arguments_.length === 0 ? compiled : resolve(arguments_[1]);
 const read = (name) => import(pathToFileURL(join(compiled, name)).href);
 const [
   { createServer },
@@ -77,7 +86,7 @@ const recordCatalog = async (profile) => {
     const digest = createHash("sha256").update(encoded).digest("hex");
     await writeFile(
       join(
-        compiled,
+        outputDirectory,
         profile === "full" ? "mcp-catalog-full.json" : "mcp-catalog.json",
       ),
       encoded,
@@ -114,6 +123,6 @@ const digests = {};
 for (const profile of ["compact", "full"])
   digests[profile] = await recordCatalog(profile);
 await writeFile(
-  join(compiled, "recordedMcpCatalog.js"),
+  join(outputDirectory, "recordedMcpCatalog.js"),
   `/** Recorded from the compiled runtime; do not edit. */\nexport const RECORDED_MCP_CATALOG_SHA256 = ${JSON.stringify(digests)};\n`,
 );

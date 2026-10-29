@@ -246,36 +246,39 @@ it.each([false, true])(
   },
 );
 
-it("reports a changed artifact when its parent directory moves during streaming", async () => {
-  const root = await createTestTempDirectory("rea-entropy-moved-");
-  const path = join(root, "bytes");
-  await writeFile(path, Buffer.alloc(512));
-  let moved = false;
-  const service = new ByteEntropyService({
-    stat,
-    open: async (...args) => {
-      const file = await open(...args);
-      const read = file.read.bind(file);
-      vi.spyOn(file, "read").mockImplementation(async (...readArgs) => {
-        const result = await read(...readArgs);
-        if (!moved) {
-          moved = true;
-          await rename(root, `${root}-moved`);
-        }
-        return result;
-      });
-      return file;
-    },
-  });
-  try {
-    expect(await service.inspect({ path, block_size: 256 })).toMatchObject({
-      ok: false,
-      error: { _tag: "AnalysisArtifactChangedError" },
+it.skipIf(process.platform === "win32")(
+  "reports a changed artifact when its parent directory moves during streaming",
+  async () => {
+    const root = await createTestTempDirectory("rea-entropy-moved-");
+    const path = join(root, "bytes");
+    await writeFile(path, Buffer.alloc(512));
+    let moved = false;
+    const service = new ByteEntropyService({
+      stat,
+      open: async (...args) => {
+        const file = await open(...args);
+        const read = file.read.bind(file);
+        vi.spyOn(file, "read").mockImplementation(async (...readArgs) => {
+          const result = await read(...readArgs);
+          if (!moved) {
+            await rename(root, `${root}-moved`);
+            moved = true;
+          }
+          return result;
+        });
+        return file;
+      },
     });
-  } finally {
-    if (moved) await rename(`${root}-moved`, root);
-  }
-});
+    try {
+      expect(await service.inspect({ path, block_size: 256 })).toMatchObject({
+        ok: false,
+        error: { _tag: "AnalysisArtifactChangedError" },
+      });
+    } finally {
+      if (moved) await rename(`${root}-moved`, root);
+    }
+  },
+);
 
 it("refuses a block series above the output-row limit before scanning", async () => {
   const root = await createTestTempDirectory("rea-entropy-block-limit-");

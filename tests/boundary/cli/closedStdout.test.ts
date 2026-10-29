@@ -7,6 +7,28 @@ import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { cliTest } from "../../support/cli/cliFixture.js";
 import type { TestProcesses } from "../../support/process/processFixture.js";
 
+cliTest(
+  "flushes delegated validation JSON before a forced CLI exit",
+  async ({ cli }) => {
+    const preload = `data:text/javascript,${encodeURIComponent(`
+const write = process.stdout._write;
+process.stdout._write = function(chunk, encoding, callback) {
+  setTimeout(() => write.call(this, chunk, encoding, callback), 75);
+};
+`)}`;
+    const result = await cli.run({
+      arguments: ["match-native-functions", "--json"],
+      environment: { NODE_OPTIONS: `--import=${preload}` },
+    });
+    expect(result.exitCode, JSON.stringify(result)).toBe(1);
+    expect(result.json, JSON.stringify(result)).toMatchObject({
+      code: "VALIDATION_ERROR",
+      fieldErrors: [expect.objectContaining({ path: "input", missing: true })],
+    });
+    expect(result.stderr).toBe("");
+  },
+);
+
 /** Run the CLI, closing its stdout reader after `bytes` (0: before any write). */
 const runWithClosedReader = async (
   processes: TestProcesses,

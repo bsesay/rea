@@ -1,10 +1,14 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { expect, it } from "vitest";
+import { expect, it as sourceTest } from "vitest";
 
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { importReferenceSource } from "../../support/referenceSourceResourceScope.js";
+
+// Reference source reads require the host no-follow admission primitive.
+const it = sourceTest.skipIf(!noFollowOpenSupported());
 
 it("retains CommonJS requires spelled as exact no-substitution templates", async () => {
   const root = await createTestTempDirectory("rea-reference-template-require-");

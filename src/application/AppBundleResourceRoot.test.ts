@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../tests/fixtures/symbolicLinks.js";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,17 +24,15 @@ it("resolves resource roots without requiring or hashing CFBundleExecutable", as
   try {
     const bundle = join(temp, "Fixture.app");
     const contents = join(bundle, "Contents");
-    const alias = join(temp, "Selected.app");
     await mkdir(contents, { recursive: true });
     await writeFile(join(contents, "Info.plist"), "<plist><dict/></plist>");
-    await symlink(bundle, alias);
 
-    const resolved = await resolveAppBundleResourceRoot(alias);
+    const resolved = await resolveAppBundleResourceRoot(bundle);
 
     expect(resolved).toEqual({
       ok: true,
       value: {
-        callerPath: alias,
+        callerPath: bundle,
         canonicalPath: bundle,
         infoPlistPath: join(bundle, "Contents", "Info.plist"),
         layout: "contents",
@@ -97,3 +96,30 @@ it("distinguishes default target binding from an explicitly unbound observation"
       .subject,
   ).toBeNull();
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "preserves caller identity when selecting a resource bundle through a symlink",
+  async () => {
+    const temp = await mkdtemp(join(tmpdir(), "rea-resource-bundle-alias-"));
+    try {
+      const bundle = join(temp, "Fixture.app"),
+        alias = join(temp, "Selected.app");
+      await mkdir(join(bundle, "Contents"), { recursive: true });
+      await writeFile(
+        join(bundle, "Contents", "Info.plist"),
+        "<plist><dict/></plist>",
+      );
+      await symlink(bundle, alias);
+      expect(await resolveAppBundleResourceRoot(alias)).toMatchObject({
+        ok: true,
+        value: {
+          callerPath: alias,
+          canonicalPath: bundle,
+          executableSha256: null,
+        },
+      });
+    } finally {
+      await rm(temp, { recursive: true, force: true });
+    }
+  },
+);

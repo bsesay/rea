@@ -1,7 +1,8 @@
+import { noFollowOpenSupported } from "../../../src/reference/ReferenceSourceReaderValidate.js";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { expect, it, onTestFinished } from "vitest";
+import { expect, it as sourceTest, onTestFinished } from "vitest";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import { createServer } from "../../../src/server/createServer.js";
 import { parseEvidence } from "../../../src/domain/evidence.js";
@@ -11,6 +12,9 @@ import { createTestBinarySession } from "../../fixtures/binarySession.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 import { importReferenceSource } from "../../support/referenceSourceResourceScope.js";
 import { analyzeJavaScriptApplication } from "../../support/javascriptApplicationScope.js";
+
+// Reference source reads require the host no-follow admission primitive.
+const it = sourceTest.skipIf(!noFollowOpenSupported());
 
 it.each(["full", "compact"] as const)(
   "selects real source-map correspondence with stable identities and full parent retention (%s)",

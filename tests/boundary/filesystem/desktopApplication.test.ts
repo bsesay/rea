@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import {
   mkdir,
   writeFile,
@@ -179,19 +180,14 @@ it("reads sparse embedded PCK ranges without hashing or retaining a large execut
   );
 });
 
-it("does not promote filenames, arbitrary pak files or symlink targets into byte facts", async () => {
+it("does not promote filenames or arbitrary pak files into byte facts", async () => {
   const root = await createTestTempDirectory("rea-desktop-unknown-");
   await put(root, "GameAssembly.dll", "x");
   await put(root, "global-metadata.dat", "");
   await put(root, "game.pck", "GDPC");
   await put(root, "resources.pak", "not Unreal");
-  await symlink("/outside/nonexistent", join(root, "foreign"));
   const { report } = await inspect(root);
   expect(report.candidates).toEqual([]);
-  expect(report.coverage.symlinks_not_followed).toBe(1);
-  expect(
-    report.files.find((file) => file.path === "foreign")?.read_status,
-  ).toBe("not-selected");
 });
 
 it("retains bounded coverage and stable pages without claiming absence after a traversal limit", async () => {
@@ -1230,5 +1226,19 @@ it.each([4, 5, 6, 7])(
     expect(report.next_probes).not.toContainEqual(
       expect.objectContaining({ operation: "inspect_il2cpp_metadata" }),
     );
+  },
+);
+
+it.skipIf(!symbolicLinksAvailable)(
+  "does not follow a foreign symlink into desktop byte facts",
+  async () => {
+    const root = await createTestTempDirectory("rea-desktop-symlink-");
+    await symlink("/outside/nonexistent", join(root, "foreign"));
+    const { report } = await inspect(root);
+    expect(report.candidates).toEqual([]);
+    expect(report.coverage.symlinks_not_followed).toBe(1);
+    expect(
+      report.files.find((file) => file.path === "foreign")?.read_status,
+    ).toBe("not-selected");
   },
 );

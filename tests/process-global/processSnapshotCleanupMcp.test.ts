@@ -61,114 +61,119 @@ const connectSession = async () => {
   return { client, server, session };
 };
 
-it("retains and retries the exact snapshot file handle through public MCP capture", async () => {
-  const root = await createTestTempDirectory("rea-process-snapshot-cleanup-");
-  const observedRoot = join(root, "observed");
-  const filePath = join(observedRoot, "input.txt");
-  await mkdir(observedRoot);
-  await writeFile(filePath, "snapshot bytes");
-  injected.path = resolve(filePath);
-  injected.failClose = true;
-  injected.opens = 0;
-  const resources = await connectSession();
-  const delivery = vi.spyOn(ToolResultDelivery.prototype, "toCallToolResult");
-  const capture = () =>
-    resources.client.callTool({
-      name: "capture_process_scenario",
-      arguments: {
-        executable: process.execPath,
-        arguments: ["-e", "process.stdout.write('captured')"],
-        working_directory: root,
-        filesystem_observation_paths: [observedRoot],
-        timeout_ms: 10_000,
-        finalization_ms: 250,
-      },
-    });
+it.skipIf(process.platform === "win32")(
+  "retains and retries the exact snapshot file handle through public MCP capture",
+  async () => {
+    const root = await createTestTempDirectory("rea-process-snapshot-cleanup-");
+    const observedRoot = join(root, "observed");
+    const filePath = join(observedRoot, "input.txt");
+    await mkdir(observedRoot);
+    await writeFile(filePath, "snapshot bytes");
+    injected.path = resolve(filePath);
+    injected.failClose = true;
+    injected.opens = 0;
+    const resources = await connectSession();
+    const delivery = vi.spyOn(ToolResultDelivery.prototype, "toCallToolResult");
+    const capture = () =>
+      resources.client.callTool({
+        name: "capture_process_scenario",
+        arguments: {
+          executable: process.execPath,
+          arguments: ["-e", "process.stdout.write('captured')"],
+          working_directory: root,
+          filesystem_observation_paths: [observedRoot],
+          timeout_ms: 10_000,
+          finalization_ms: 250,
+        },
+      });
 
-  try {
-    const failed = parseMcpToolError(await capture());
-    expect(injected.opens, JSON.stringify(failed)).toBe(1);
-    expect(injected.handle?.fd).toBeGreaterThanOrEqual(0);
-    expect(failed.error).toMatchObject({
-      code: "cleanup_incomplete",
-      details: {
-        resources: [injected.path],
-        partial_observation: {
-          observations: {
-            filesystem_snapshots: {
-              before: {
-                state: "available",
-                value: {
-                  files: expect.arrayContaining([
-                    expect.objectContaining({ path: "root_0:input.txt" }),
-                  ]),
+    try {
+      const failed = parseMcpToolError(await capture());
+      expect(injected.opens, JSON.stringify(failed)).toBe(1);
+      expect(injected.handle?.fd).toBeGreaterThanOrEqual(0);
+      expect(failed.error).toMatchObject({
+        code: "cleanup_incomplete",
+        details: {
+          resources: [injected.path],
+          partial_observation: {
+            observations: {
+              filesystem_snapshots: {
+                before: {
+                  state: "available",
+                  value: {
+                    files: expect.arrayContaining([
+                      expect.objectContaining({ path: "root_0:input.txt" }),
+                    ]),
+                  },
                 },
               },
             },
           },
         },
-      },
-    });
-    const firstDelivered = delivery.mock.calls.at(-1)?.[0];
-    expect(firstDelivered?.ok).toBe(false);
-    if (firstDelivered === undefined || firstDelivered.ok)
-      throw new Error("Expected a delivered snapshot failure");
-    expect(firstDelivered.error.cleanupResources).toContain(injected.path);
+      });
+      const firstDelivered = delivery.mock.calls.at(-1)?.[0];
+      expect(firstDelivered?.ok).toBe(false);
+      if (firstDelivered === undefined || firstDelivered.ok)
+        throw new Error("Expected a delivered snapshot failure");
+      expect(firstDelivered.error.cleanupResources).toContain(injected.path);
 
-    const retryBlocked = parseMcpToolError(await capture());
-    expect(retryBlocked.error.code).toBe("cleanup_incomplete");
-    expect(retryBlocked.error.details).toMatchObject({
-      resources: [injected.path],
-    });
-    expect(injected.opens, JSON.stringify(retryBlocked)).toBe(1);
-    expect(injected.handle?.fd).toBeGreaterThanOrEqual(0);
+      const retryBlocked = parseMcpToolError(await capture());
+      expect(retryBlocked.error.code).toBe("cleanup_incomplete");
+      expect(retryBlocked.error.details).toMatchObject({
+        resources: [injected.path],
+      });
+      expect(injected.opens, JSON.stringify(retryBlocked)).toBe(1);
+      expect(injected.handle?.fd).toBeGreaterThanOrEqual(0);
 
-    injected.failClose = false;
-    const exactFd = injected.handle?.fd;
-    const closed = await resources.client.callTool({
-      name: "close_binary",
-      arguments: {},
-    });
-    expect(closed.isError, JSON.stringify(closed.content)).not.toBe(true);
-    expect(injected.handle?.fd).toBe(-1);
-    expect(exactFd).toBeGreaterThanOrEqual(0);
-    if (injected.handle === undefined)
-      throw new Error("Expected the retained snapshot file descriptor");
-    await expect(injected.handle.stat()).rejects.toMatchObject({
-      code: "EBADF",
-    });
-    expect(firstDelivered.error.cleanupIncomplete).toBe(false);
-    expect(firstDelivered.error.cleanupResources).toEqual([]);
-
-    const recovered = await capture();
-    expect(recovered.isError, JSON.stringify(recovered.content)).not.toBe(true);
-    expect(injected.opens).toBe(3);
-    expect(recovered.structuredContent).toMatchObject({
-      normalized_result: {
-        files_before: expect.arrayContaining([
-          expect.objectContaining({ path: "root_0:input.txt" }),
-        ]),
-        files_after: expect.arrayContaining([
-          expect.objectContaining({ path: "root_0:input.txt" }),
-        ]),
-      },
-    });
-  } finally {
-    injected.failClose = false;
-    if (injected.handle?.fd !== undefined && injected.handle.fd >= 0) {
-      const cleanup = await resources.client.callTool({
+      injected.failClose = false;
+      const exactFd = injected.handle?.fd;
+      const closed = await resources.client.callTool({
         name: "close_binary",
         arguments: {},
       });
-      expect(cleanup.isError, JSON.stringify(cleanup.content)).not.toBe(true);
+      expect(closed.isError, JSON.stringify(closed.content)).not.toBe(true);
+      expect(injected.handle?.fd).toBe(-1);
+      expect(exactFd).toBeGreaterThanOrEqual(0);
+      if (injected.handle === undefined)
+        throw new Error("Expected the retained snapshot file descriptor");
+      await expect(injected.handle.stat()).rejects.toMatchObject({
+        code: "EBADF",
+      });
+      expect(firstDelivered.error.cleanupIncomplete).toBe(false);
+      expect(firstDelivered.error.cleanupResources).toEqual([]);
+
+      const recovered = await capture();
+      expect(recovered.isError, JSON.stringify(recovered.content)).not.toBe(
+        true,
+      );
+      expect(injected.opens).toBe(3);
+      expect(recovered.structuredContent).toMatchObject({
+        normalized_result: {
+          files_before: expect.arrayContaining([
+            expect.objectContaining({ path: "root_0:input.txt" }),
+          ]),
+          files_after: expect.arrayContaining([
+            expect.objectContaining({ path: "root_0:input.txt" }),
+          ]),
+        },
+      });
+    } finally {
+      injected.failClose = false;
+      if (injected.handle?.fd !== undefined && injected.handle.fd >= 0) {
+        const cleanup = await resources.client.callTool({
+          name: "close_binary",
+          arguments: {},
+        });
+        expect(cleanup.isError, JSON.stringify(cleanup.content)).not.toBe(true);
+      }
+      delivery.mockRestore();
+      await resources.client.close();
+      await resources.server.close();
+      const closed = await resources.session.close();
+      expect(closed.ok).toBe(true);
+      await rm(root, { recursive: true, force: true });
+      injected.path = "";
+      injected.handle = undefined;
     }
-    delivery.mockRestore();
-    await resources.client.close();
-    await resources.server.close();
-    const closed = await resources.session.close();
-    expect(closed.ok).toBe(true);
-    await rm(root, { recursive: true, force: true });
-    injected.path = "";
-    injected.handle = undefined;
-  }
-});
+  },
+);

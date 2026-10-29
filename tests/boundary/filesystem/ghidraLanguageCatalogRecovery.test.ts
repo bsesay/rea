@@ -1,12 +1,15 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { AnalysisProviderRegistry } from "../../../src/application/binary/AnalysisProviderRegistry.js";
 import { composeBinarySession } from "../../../src/application/binary/BinarySessionComposition.js";
 import { parseConfig } from "../../../src/config/parseConfig.js";
 import type { BinaryTarget } from "../../../src/domain/binaryTargetTypes.js";
-import { ghidraProfileInstallationHost } from "../../../src/ghidra/GhidraInstallation.fixture.js";
+import {
+  ghidraProfileInstallationHost,
+  ghidraProfileFixturePath,
+} from "../../../src/ghidra/GhidraInstallation.fixture.js";
 import { GhidraProvider } from "../../../src/ghidra/GhidraProvider.js";
 import { silentLogger } from "../../../src/logger.js";
 import { createServer } from "../../../src/server/createServer.js";
@@ -30,7 +33,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     ...actual,
     open: async (...args: Parameters<typeof actual.open>) => {
       const handle = await actual.open(...args);
-      if (fault.enabled && String(args[0]).endsWith("/x86.ldefs")) {
+      if (fault.enabled && basename(String(args[0])) === "x86.ldefs") {
         fault.opens++;
         const close = handle.close.bind(handle);
         handle.close = async () => {
@@ -69,7 +72,7 @@ const fixture = async () => {
   );
   await writeFile(path, nativeAotPeFixture());
   const config = parseConfig({
-    GHIDRA_INSTALL_DIR: root,
+    GHIDRA_INSTALL_DIR: ghidraProfileFixturePath(root),
     REA_GHIDRA_LANGUAGE_ID: "x86:LE:64:default",
   });
   if (!config.ok) throw config.error;
@@ -99,7 +102,10 @@ const fixture = async () => {
     managed: false,
   };
   return {
-    definition: join(languages, "x86.ldefs"),
+    definition: join(
+      ghidraProfileFixturePath(root),
+      "Ghidra/Processors/x86/data/languages/x86.ldefs",
+    ),
     path,
     provider,
     registry,
@@ -127,7 +133,8 @@ it("retries the retained catalog close on later MCP admission and reopens the sa
   try {
     await server.connect(serverTransport);
     await client.connect(clientTransport);
-    expect((await call("open_binary")).isError).not.toBe(true);
+    const opened = await call("open_binary");
+    expect(opened.isError, JSON.stringify(opened)).not.toBe(true);
     expect((await call("close_binary")).isError).not.toBe(true);
 
     fault.enabled = true;
@@ -182,7 +189,9 @@ it.each(["released", "still failing"] as const)(
     fault.deny = true;
     const first = await registry.select(target, "ghidra");
     if (first.ok) throw new Error("Expected incomplete catalog cleanup");
-    expect(first.error.cleanupIncomplete).toBe(true);
+    expect(first.error.cleanupIncomplete, JSON.stringify(first.error)).toBe(
+      true,
+    );
     expect(first.error.cleanupResources).toEqual([definition]);
 
     const entered = createDeferred<undefined>();

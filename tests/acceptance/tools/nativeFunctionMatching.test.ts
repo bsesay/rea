@@ -464,12 +464,14 @@ cliTest(
         "--json",
       ],
     });
-    expect(corruptInline.json).toMatchObject({
+    expect(corruptInline.json, JSON.stringify(corruptInline)).toMatchObject({
       code: "evidence_integrity_mismatch",
     });
-    expect(corruptPortable.json).toMatchObject({
-      code: "evidence_integrity_mismatch",
-    });
+    expect(corruptPortable.json, JSON.stringify(corruptPortable)).toMatchObject(
+      {
+        code: "evidence_integrity_mismatch",
+      },
+    );
 
     const malformedBundlePath = join(root, "malformed-outer-frame.json");
     await writeFile(malformedBundlePath, JSON.stringify({ records: [left] }));

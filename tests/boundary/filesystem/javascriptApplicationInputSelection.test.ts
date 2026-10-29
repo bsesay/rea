@@ -1,4 +1,4 @@
-import { chmod, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { describe, expect, it, onTestFinished } from "vitest";
@@ -26,6 +26,11 @@ describe("JavaScript application input selection", () => {
   it("preserves the selected path and host reason for an overlong name", async () => {
     const { root } = await application();
     const longPath = join(root, "x".repeat(300));
+    const observed = await stat(longPath).then(
+      () => undefined,
+      (error: NodeJS.ErrnoException) => error.code,
+    );
+    expect(["ENAMETOOLONG", "ENOENT"]).toContain(observed);
 
     expect(await analyzeFailure({ input_path: longPath })).toMatchObject({
       code: "invalid_request",
@@ -35,7 +40,9 @@ describe("JavaScript application input selection", () => {
             path: ["input_path"],
             reason: "invalid_value",
             message: expect.stringContaining(
-              `Selected input path exceeds the host path or component length limit (ENAMETOOLONG): ${longPath}`,
+              observed === "ENAMETOOLONG"
+                ? `Selected input path exceeds the host path or component length limit (ENAMETOOLONG): ${longPath}`
+                : `No file or directory exists at the selected input path (ENOENT): ${longPath}`,
             ),
           },
         ],

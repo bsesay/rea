@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../tests/fixtures/symbolicLinks.js";
 import { expect, it, vi } from "vitest";
 import { execFileOutput } from "../process/ExecFileOutput.js";
 import { createNativeUiHelperRuntime } from "./NativeUiHelperRuntime.js";
@@ -21,7 +22,7 @@ const helperCapture = {
   stderrBytes: 0,
 };
 
-it.each([250_000, undefined])(
+it.skipIf(!symbolicLinksAvailable).each([250_000, undefined])(
   "uses the selected UI deadline for both helper subprocesses: %s",
   async (deadlineMs) => {
     vi.mocked(execFileOutput).mockReset();

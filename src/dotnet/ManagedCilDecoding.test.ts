@@ -212,6 +212,7 @@ describe("managed CIL decoding", () => {
     fatHeader.writeUInt32LE(0x1100_0001, 8);
     const fatBytes = buildManagedPeFixture({
       ilBody: Buffer.concat([fatHeader, il]),
+      standaloneSignatures: [Buffer.from([0x07, 0x01, 0x08])],
     });
     const tiny = inspectManagedMembersBytes(
       tinyBytes,

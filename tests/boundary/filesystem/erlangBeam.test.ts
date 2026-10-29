@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -13,15 +14,12 @@ describe("Erlang BEAM stable filesystem boundary", () => {
   it("reports non-file and malformed BEAM selections as caller input errors", async () => {
     const root = await createTestTempDirectory("rea-beam-files-");
     const path = join(root, "app.beam");
-    const alias = join(root, "alias.beam");
     const malformed = join(root, "malformed.beam");
     await writeFile(path, erlangBeamFixture());
     await writeFile(malformed, Buffer.from("not a beam"));
-    await symlink(path, alias);
     const service = createBeamService();
     for (const [candidate, reason] of [
       [root, "invalid_format"],
-      [alias, "invalid_format"],
       [malformed, "invalid_format"],
       [join(root, "missing.beam"), "invalid_value"],
       [join(path, "child.beam"), "invalid_value"],
@@ -79,3 +77,27 @@ describe("Erlang BEAM stable filesystem boundary", () => {
     });
   });
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "rejects a symlink at the stable erlangBeam input boundary",
+  async () => {
+    const root = await createTestTempDirectory("rea-erlangBeam-symlink-");
+    const path = join(root, "target"),
+      alias = join(root, "alias");
+    await writeFile(path, erlangBeamFixture());
+    await symlink(path, alias);
+    const result = await createBeamService().inspect({ path: alias });
+    if (result.ok) throw new Error("Symlink input was admitted");
+    expect(result.error).toMatchObject({
+      _tag: "AnalysisInputError",
+      operation: "inspect_erlang_beam",
+      issues: [
+        {
+          path: ["path"],
+          reason: "invalid_format",
+          message: expect.any(String),
+        },
+      ],
+    });
+  },
+);

@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -9,15 +10,12 @@ describe("PE certificate stable filesystem boundary", () => {
   it("reports non-file and malformed PE selections as caller input errors", async () => {
     const root = await createTestTempDirectory("rea-pe-cert-files-");
     const path = join(root, "signed.exe");
-    const alias = join(root, "alias.exe");
     const malformed = join(root, "malformed.exe");
     await writeFile(path, peCertificateFixture());
     await writeFile(malformed, Buffer.from("not a pe"));
-    await symlink(path, alias);
     const service = createPeCertificatesService();
     for (const [candidate, reason] of [
       [root, "invalid_format"],
-      [alias, "invalid_format"],
       [malformed, "invalid_format"],
       [join(root, "missing.exe"), "invalid_value"],
       [join(path, "child.exe"), "invalid_value"],
@@ -55,3 +53,27 @@ describe("PE certificate stable filesystem boundary", () => {
     expect(cancelled.error._tag).toBe("AnalysisCancelledError");
   });
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "rejects a symlink at the stable peCertificates input boundary",
+  async () => {
+    const root = await createTestTempDirectory("rea-peCertificates-symlink-");
+    const path = join(root, "target"),
+      alias = join(root, "alias");
+    await writeFile(path, peCertificateFixture());
+    await symlink(path, alias);
+    const result = await createPeCertificatesService().inspect({ path: alias });
+    if (result.ok) throw new Error("Symlink input was admitted");
+    expect(result.error).toMatchObject({
+      _tag: "AnalysisInputError",
+      operation: "inspect_pe_certificates",
+      issues: [
+        {
+          path: ["path"],
+          reason: "invalid_format",
+          message: expect.any(String),
+        },
+      ],
+    });
+  },
+);

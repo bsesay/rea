@@ -129,13 +129,13 @@ const protocolWorkerProgram = (
         ? `process.stderr.write("allocation failed\\n", () => process.exit(7));`
         : failure === "zero-exit-held-pipe"
           ? `const program = "setTimeout(() => process.exit(0), 300);";
-           spawn(process.execPath, ["-e", program], { stdio: ["ignore", "inherit", "inherit"] });
+           spawn(process.execPath, ["-e", program], { detached: process.platform === "win32", stdio: ["ignore", "inherit", "inherit"] });
            process.exit(0);`
           : failure === "exit-7"
             ? `process.stderr.write("controlled exit 7\\n", () => process.exit(7));`
             : failure === "tail-exit"
               ? `const lateProgram = "setTimeout(() => { process.stderr.write('late tail marker'); setTimeout(() => process.exit(0), 500); }, 50);";
-             spawn(process.execPath, ["-e", lateProgram], { stdio: ["ignore", "ignore", "inherit"] });
+             spawn(process.execPath, ["-e", lateProgram], { detached: process.platform === "win32", stdio: ["ignore", "ignore", "inherit"] });
              process.stderr.write("early exit marker\\n", () => process.exit(7));`
               : failure === "truncated-exit"
                 ? `process.stderr.write("x".repeat(300 * 1024), () => process.exit(7));`
@@ -152,7 +152,7 @@ const protocolWorkerProgram = (
                         : failure === "final-frame-held-pipe"
                           ? `const frame = JSON.stringify({ kind: "failure", id: request.id, reason: "output", message: "final frame from descendant" });
                const program = "setTimeout(() => { process.stdout.write(" + JSON.stringify(frame + "\\n") + "); setInterval(() => {}, 1000); }, 100);";
-               spawn(process.execPath, ["-e", program], { stdio: ["ignore", "inherit", "inherit"] });
+               spawn(process.execPath, ["-e", program], { detached: process.platform === "win32", stdio: ["ignore", "inherit", "inherit"] });
                process.exit(7);`
                           : failure === "late-failure"
                             ? `process.stdout.write(JSON.stringify({ kind: "failure", id: request.id, reason: "output", message: "failure frame before abort" }) + "\\n");

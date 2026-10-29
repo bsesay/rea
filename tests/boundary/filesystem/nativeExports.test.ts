@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { createHash } from "node:crypto";
 import { symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -57,7 +58,6 @@ describe("native export stable filesystem boundary", () => {
   it("returns typed input, unsupported, budget and cancellation failures", async () => {
     const root = await createTestTempDirectory("rea-native-export-failures-");
     const path = join(root, "fixture.dll");
-    const alias = join(root, "alias.dll");
     const macho = join(root, "fixture.dylib");
     const malformed = join(root, "malformed.dll");
     await writeFile(path, peExportImage({ functions: [] }));
@@ -65,7 +65,6 @@ describe("native export stable filesystem boundary", () => {
     machoBytes.writeUInt32LE(0xfeedfacf, 0);
     await writeFile(macho, machoBytes);
     await writeFile(malformed, Buffer.from("MZ not a PE image"));
-    await symlink(path, alias);
     const service = createNativeExportsService();
     const failure = async (
       input: Record<string, unknown>,
@@ -80,7 +79,6 @@ describe("native export stable filesystem boundary", () => {
     };
 
     for (const [candidate, reason] of [
-      [alias, "invalid_format"],
       [malformed, "invalid_format"],
       [join(root, "missing.dll"), "invalid_value"],
     ] as const)
@@ -102,3 +100,25 @@ describe("native export stable filesystem boundary", () => {
     await service.close();
   });
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "rejects a symlinked native export input",
+  async () => {
+    const root = await createTestTempDirectory("rea-export-alias-");
+    const path = join(root, "target"),
+      alias = join(root, "alias");
+    await writeFile(path, peExportImage({ functions: [] }));
+    await symlink(path, alias);
+    const service = createNativeExportsService();
+    try {
+      const result = await service.inspect({ path: alias });
+      if (result.ok) throw new Error("Symlink admitted");
+      expect(result.error).toMatchObject({
+        _tag: "AnalysisInputError",
+        issues: [{ path: ["path"], reason: "invalid_format" }],
+      });
+    } finally {
+      await service.close();
+    }
+  },
+);

@@ -63,9 +63,10 @@ const PROJECT_POLICIES = {
   "cli-boundary": {
     pool: "forks" as const,
     maxWorkers: MAX_TEST_WORKERS,
-    // CLI tests create fresh command instances or subprocesses and own their
-    // cleanup. Reuse the immutable graph; module mocks belong in process-global.
-    isolate: false,
+    // CLI files also build source analysis and MCP schema graphs in this worker.
+    // Retaining every file's module context exhausts the bounded heap and can
+    // turn otherwise complete analysis into a parent-memory refusal.
+    isolate: true,
     // Coverage of the shared command/schema graph exhausts the ordinary
     // 384 MiB budget. The preloaded CLI/ADB control completes with 512 MiB;
     // keep both profiles bounded with the same concurrency.

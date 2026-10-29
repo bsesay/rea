@@ -1,13 +1,16 @@
 import { readdir, type FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, expect, it as platformTest, vi } from "vitest";
 
 import { ArtifactResourceScope } from "../../../../src/artifacts/ArtifactResourceScope.js";
 import { AnalysisCancelledError } from "../../../../src/domain/analysisErrorCore.js";
 import { projectAnalysisError } from "../../../../src/domain/analysisErrorProjection.js";
 import { ProviderCleanupError } from "../../../../src/domain/providerCleanupError.js";
 import { run, session } from "./kunaSessionFixture.js";
+
+// Kuna has no Windows provider; these lifecycle fixtures require its POSIX host.
+const it = platformTest.skipIf(process.platform === "win32");
 
 const fault = vi.hoisted(() => ({
   fail: false,
@@ -452,3 +455,5 @@ it("removes a span lease from the resource scope after close succeeds", async ()
       if (handle.fd >= 0) await handle.close().catch(() => undefined);
   }
 });
+
+// These fixtures execute providers whose transport/host authority excludes Windows.

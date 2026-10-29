@@ -1,3 +1,4 @@
+import { symbolicLinksAvailable } from "../../fixtures/symbolicLinks.js";
 import { createHash } from "node:crypto";
 import { open, writeFile, symlink, truncate } from "node:fs/promises";
 import { join } from "node:path";
@@ -815,7 +816,7 @@ it("reports a truncated safetensors header whose length resembles a pickle marke
 it("bounds expansion before allocation and distinguishes unsupported pickle, version and paths", async () => {
   const fixture = ggufFixture();
   fixture.bytes.writeBigUInt64LE(0xffffffffffffffffn, 8);
-  const { provider, path, root } = await providerAt(fixture.bytes);
+  const { provider, path } = await providerAt(fixture.bytes);
   const huge = await provider.inspect({ path, hash: "header" });
   if (huge.ok) throw new Error("Huge count admitted");
   expect(huge.error._tag).toBe("AnalysisResourceConstraintError");
@@ -827,10 +828,7 @@ it("bounds expansion before allocation and distinguishes unsupported pickle, ver
   const version = await provider.inspect({ path, hash: "header" });
   if (version.ok) throw new Error("Unknown version admitted");
   expect(version.error._tag).toBe("AnalysisUnsupportedTargetError");
-  const alias = join(root, "link");
-  await symlink(path, alias);
-  const linked = await provider.inspect({ path: alias, hash: "header" });
-  expect(linked.ok).toBe(false);
+
   const service = createModelArtifactService();
   onTestFinished(() => service.close());
   const invalid = await service.inspect({
@@ -1027,3 +1025,14 @@ it("retains explicit scoped identity through shared service and preserves caller
   if (stopped.ok) throw new Error("Cancellation ignored");
   expect(stopped.error.cause).toBe(reason);
 });
+
+it.skipIf(!symbolicLinksAvailable)(
+  "rejects a model selected through a symlink",
+  async () => {
+    const { provider, path, root } = await providerAt(ggufFixture().bytes);
+    const alias = join(root, "link");
+    await symlink(path, alias);
+    const linked = await provider.inspect({ path: alias, hash: "header" });
+    expect(linked.ok).toBe(false);
+  },
+);

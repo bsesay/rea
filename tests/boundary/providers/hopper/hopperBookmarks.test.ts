@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -54,7 +55,7 @@ const resultSchema = z.strictObject({
 
 describe("Hopper bookmark bridge mutations", () => {
   it("uses exact provider readback and preserves omission semantics", async () => {
-    const { stdout } = await execute("python3", [probePath, bridgePath], {
+    const { stdout } = await execute(pythonCommand, [probePath, bridgePath], {
       encoding: "utf8",
       timeout: 3_000,
       maxBuffer: 1_024 * 1_024,

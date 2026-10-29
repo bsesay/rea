@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { spawnSync } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { promisify } from "node:util";
 import {
   cp,
   mkdir,
@@ -30,6 +31,9 @@ const connect = async (
     env: {
       PATH: process.env.PATH ?? "",
       HOME: process.env.HOME ?? "",
+      ...(process.platform === "win32" && process.env.SystemRoot !== undefined
+        ? { SystemRoot: process.env.SystemRoot }
+        : {}),
       REA_LOG_LEVEL: "silent",
       ...environment,
     },
@@ -631,10 +635,8 @@ const copyCompiledPackage = async (prefix: string): Promise<string> => {
 };
 
 it("records the canonical catalog without a host account or ambient configuration", async () => {
-  const directory = await copyCompiledPackage("rea-catalog-without-account-");
-  await cp(
-    resolve("scripts/record-mcp-catalog.mjs"),
-    join(directory, "scripts/record-mcp-catalog.mjs"),
+  const directory = await createTestTempDirectory(
+    "rea-catalog-without-account-",
   );
   const temporary = join(directory, "temporary");
   await mkdir(temporary);
@@ -644,9 +646,14 @@ import { syncBuiltinESMExports } from "node:module";
 os.userInfo = () => { throw new Error("Host account is unavailable"); };
 syncBuiltinESMExports();
 `)}`;
-  const child = spawnSync(
+  const child = await promisify(execFile)(
     process.execPath,
-    [`--import=${hook}`, join(directory, "scripts/record-mcp-catalog.mjs")],
+    [
+      `--import=${hook}`,
+      resolve("scripts/record-mcp-catalog.mjs"),
+      "--output-directory",
+      directory,
+    ],
     {
       cwd: directory,
       env: {
@@ -663,16 +670,17 @@ syncBuiltinESMExports();
       timeout: 30000,
     },
   );
-  expect(child.error).toBeUndefined();
-  expect(child.status, child.stderr).toBe(0);
   expect(child.stdout).toBe("");
   expect(child.stderr).toBe("");
-  expect(await readFile(join(directory, "dist/mcp-catalog.json"), "utf8")).toBe(
+  expect(await readFile(join(directory, "mcp-catalog.json"), "utf8")).toBe(
     await readFile("dist/mcp-catalog.json", "utf8"),
   );
-  expect(
-    await readFile(join(directory, "dist/recordedMcpCatalog.js"), "utf8"),
-  ).toBe(await readFile("dist/recordedMcpCatalog.js", "utf8"));
+  expect(await readFile(join(directory, "mcp-catalog-full.json"), "utf8")).toBe(
+    await readFile("dist/mcp-catalog-full.json", "utf8"),
+  );
+  expect(await readFile(join(directory, "recordedMcpCatalog.js"), "utf8")).toBe(
+    await readFile("dist/recordedMcpCatalog.js", "utf8"),
+  );
   expect(await readdir(temporary)).toEqual([]);
 });
 

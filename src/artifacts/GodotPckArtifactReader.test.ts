@@ -237,31 +237,34 @@ describe("GodotPckArtifactReader member streams", () => {
     );
   });
 
-  it("reads members from the admitted descriptor after the path is replaced", async () => {
-    const path = await writePck(buildGodotPck(3, members));
-    const handle = await openRegularFile(path, { symlinks: "reject" });
-    try {
-      const replacement = join(dirname(path), "replacement");
-      await writeFile(
-        replacement,
-        buildGodotPck(3, [{ path: "other.gd", data: "" }]),
-      );
-      await rename(replacement, path);
-      const reader = new GodotPckArtifactReader(path, {
-        handle,
-        initial: await handle.stat(),
-      });
-      const entries = await list(reader);
-      expect(entries.map(({ path: member }) => member)).toEqual([
-        "scenes/main.gd",
-        "project.binary",
-        "data/é.json",
-      ]);
-      await reader.close();
-    } finally {
-      await handle.close();
-    }
-  });
+  it.skipIf(process.platform === "win32")(
+    "reads members from the admitted descriptor after the path is replaced",
+    async () => {
+      const path = await writePck(buildGodotPck(3, members));
+      const handle = await openRegularFile(path, { symlinks: "reject" });
+      try {
+        const replacement = join(dirname(path), "replacement");
+        await writeFile(
+          replacement,
+          buildGodotPck(3, [{ path: "other.gd", data: "" }]),
+        );
+        await rename(replacement, path);
+        const reader = new GodotPckArtifactReader(path, {
+          handle,
+          initial: await handle.stat(),
+        });
+        const entries = await list(reader);
+        expect(entries.map(({ path: member }) => member)).toEqual([
+          "scenes/main.gd",
+          "project.binary",
+          "data/é.json",
+        ]);
+        await reader.close();
+      } finally {
+        await handle.close();
+      }
+    },
+  );
 });
 
 describe("Godot PCK logical-byte admission", () => {

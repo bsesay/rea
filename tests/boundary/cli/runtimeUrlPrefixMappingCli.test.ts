@@ -1,28 +1,20 @@
 import { execFile } from "node:child_process";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import { z } from "zod";
 
 import { createBrowserEvidence } from "../../../src/application/BrowserEvidence.js";
 import { inspectWebPageInputSchema } from "../../../src/domain/browserObservation.js";
+import { javascriptApplicationAnalysisResultSchema } from "../../../src/domain/javascript/javascriptApplicationAnalysis.js";
 import { analyzeFixture } from "../../fixtures/javascriptRuntimeReconciliation.js";
 import { passiveNetworkCapture } from "../../fixtures/passiveNetworkCapture.js";
 import { createTestTempDirectory } from "../../fixtures/temporaryDirectory.js";
 
 const execute = promisify(execFile);
 const INTEGRATION_TEST_TIMEOUT_MS = 30_000;
-const temporary: string[] = [];
-
-afterEach(async () => {
-  await Promise.all(
-    temporary
-      .splice(0)
-      .map(async (path) => rm(path, { recursive: true, force: true })),
-  );
-});
 
 const reconciledSchema = z.object({
   normalized_result: z.object({
@@ -200,7 +192,6 @@ it(
   "keeps an encoded slash inside one URL segment rather than naming a nested artifact",
   async () => {
     const root = await createTestTempDirectory("rea-url-prefix-segments-");
-    temporary.push(root);
     await mkdir(join(root, "child"));
     await Promise.all([
       writeFile(join(root, "child", "part.js"), "export const nested = 1;\n"),
@@ -239,13 +230,25 @@ it(
   "keeps static load state unknown beneath a prefix whose runtime script had no artifact path",
   async () => {
     const root = await createTestTempDirectory("rea-url-prefix-load-state-");
-    temporary.push(root);
     await mkdir(join(root, "child"));
     await Promise.all([
       writeFile(join(root, "child", "part.js"), "export const nested = 1;\n"),
       writeFile(join(root, "other.js"), "export const other = 2;\n"),
     ]);
     const analysis = await analyzeFixture(root);
+
+    const staticResult = javascriptApplicationAnalysisResultSchema.parse(
+      analysis.normalized_result,
+    );
+    expect(
+      staticResult.graph.coverage.status,
+      JSON.stringify({
+        coverage: staticResult.graph.coverage,
+        limitations: staticResult.graph.limitations,
+        statistics: staticResult.statistics,
+        integrity: staticResult.integrity_contradictions,
+      }),
+    ).toBe("complete");
 
     const control = await reconcileThroughCli(root, analysis, ["other.js"]);
     expect(Object.fromEntries(control.loadStates)).toEqual({

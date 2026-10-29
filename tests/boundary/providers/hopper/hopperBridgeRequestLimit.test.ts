@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { expect, it as platformTest, vi } from "vitest";
 
 import { AnalysisResourceConstraintError } from "../../../../src/domain/analysisErrorCore.js";
 import { HopperClient } from "../../../../src/hopper/HopperClient.js";
@@ -6,6 +6,9 @@ import {
   HopperFixtureLauncher,
   trackHopperClient,
 } from "./hopperClient.fixture.js";
+
+// This transport fixture binds a POSIX Unix-domain socket.
+const it = platformTest.skipIf(process.platform === "win32");
 
 const limit = (maximumBytes: number) =>
   ({ maximumBytes, source: "setting" }) as const;
@@ -214,3 +217,5 @@ it("sends a Hopper request above 16 MiB when both sides raise the ceiling", asyn
     value: { value },
   });
 });
+
+// These fixtures execute providers whose transport/host authority excludes Windows.

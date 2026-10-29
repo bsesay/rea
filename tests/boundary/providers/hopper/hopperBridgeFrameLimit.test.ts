@@ -1,3 +1,4 @@
+import { pythonCommand } from "../../../fixtures/pythonCommand.js";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -39,7 +40,7 @@ const probeResultSchema = z.strictObject({
 });
 
 it("serves requests up to the frame limit and refuses a line that exceeds it", async () => {
-  const { stdout } = await execute("python3", [
+  const { stdout } = await execute(pythonCommand, [
     fileURLToPath(probePath),
     fileURLToPath(bridgePath),
   ]);
@@ -96,7 +97,7 @@ it("serves requests up to the frame limit and refuses a line that exceeds it", a
 });
 
 const runProbe = async (...arguments_: readonly string[]): Promise<unknown> => {
-  const { stdout } = await execute("python3", [
+  const { stdout } = await execute(pythonCommand, [
     fileURLToPath(probePath),
     fileURLToPath(bridgePath),
     ...arguments_,

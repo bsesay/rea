@@ -8,6 +8,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { join, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect } from "vitest";
 
@@ -43,7 +44,7 @@ cliTest(
         "--json",
       ],
       environment: {
-        NODE_OPTIONS: `--import=${preload} --max-old-space-size=768`,
+        NODE_OPTIONS: `--import=${pathToFileURL(preload).href} --max-old-space-size=768`,
         NODE_DISABLE_COMPILE_CACHE: "1",
       },
       timeoutMs: 30_000,

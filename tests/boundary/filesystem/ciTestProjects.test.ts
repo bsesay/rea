@@ -118,6 +118,7 @@ describe("canonical test-project ownership", () => {
       const project = config.test.projects.find(project => project.test.name === 'cli-boundary');
       console.log(JSON.stringify({
         execArgv: project.test.execArgv,
+        isolate: project.test.isolate,
         timeout: config.test.testTimeout,
         lines: config.test.coverage.thresholds.lines,
       }));
@@ -135,6 +136,7 @@ describe("canonical test-project ownership", () => {
       );
       expect(JSON.parse(result.stdout)).toEqual({
         execArgv: [`--max-old-space-size=${String(heap)}`],
+        isolate: true,
         timeout,
         lines,
       });

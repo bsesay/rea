@@ -525,7 +525,9 @@ it("retains the full directory snapshot and exact directory owner when close fai
   expect(failure.snapshot?.files).toEqual(
     expect.arrayContaining([
       expect.objectContaining({ path: "root_0:observed" }),
-      expect.objectContaining({ path: "root_0:observed/payload" }),
+      expect.objectContaining({
+        path: `root_0:${join("observed", "payload")}`,
+      }),
     ]),
   );
   expect(failure.cleanupLeases).toHaveLength(1);

@@ -1,6 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { expect } from "vitest";
 
 import { resolveSwiftcCompileTimeoutMs } from "../../../src/process/DarwinProcessRunTokenReader.js";
@@ -172,7 +172,7 @@ registerHooks({ load(url, context, nextLoad) {
       process.execPath,
       [
         "--import",
-        loader,
+        pathToFileURL(loader).href,
         fileURLToPath(
           new URL(
             "../../../scripts/verify-agent-experience.mjs",
@@ -271,7 +271,7 @@ registerHooks({ load(url, context, nextLoad) {
       process.execPath,
       [
         "--import",
-        loader,
+        pathToFileURL(loader).href,
         fileURLToPath(
           new URL(
             "../../../scripts/verify-agent-experience.mjs",

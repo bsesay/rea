@@ -54,7 +54,7 @@ export const verifyJavaScriptReturnShapes = async (
       "--json",
     ],
   });
-  expect(cliResponse.exitCode).toBe(0);
+  expect(cliResponse.exitCode, JSON.stringify(cliResponse)).toBe(0);
   const contract = toolContract("analyze_javascript_application");
   const cliEvidence = contract.outputSchema.parse(cliResponse.json);
   check(exportedReturnFields(cliEvidence.normalized_result));
@@ -63,7 +63,12 @@ export const verifyJavaScriptReturnShapes = async (
     command: process.execPath,
     args: [resolve("scripts/rea.mjs"), "mcp"],
     cwd: process.cwd(),
-    env: { PATH: process.env.PATH ?? "" },
+    env: {
+      PATH: process.env.PATH ?? "",
+      ...(process.platform === "win32" && process.env.SystemRoot !== undefined
+        ? { SystemRoot: process.env.SystemRoot }
+        : {}),
+    },
     stderr: "pipe",
   });
   transport.stderr?.on("data", () => undefined);

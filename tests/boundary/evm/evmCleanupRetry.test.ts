@@ -170,6 +170,12 @@ it.each([
         }
         return spawnOwnedProviderProcess({
           ...spawn,
+          hostEnvironment: {
+            ...spawn.hostEnvironment,
+            ...(process.platform === "win32"
+              ? { SystemRoot: process.env.SystemRoot }
+              : {}),
+          },
           command: process.execPath,
           arguments: [
             "-e",
@@ -344,6 +350,12 @@ it("keeps a mixed root and reply-descriptor aggregate pending until both owners 
       if (arch !== undefined) Object.defineProperty(process, "arch", arch);
       return spawnOwnedProviderProcess({
         ...spawn,
+        hostEnvironment: {
+          ...spawn.hostEnvironment,
+          ...(process.platform === "win32"
+            ? { SystemRoot: process.env.SystemRoot }
+            : {}),
+        },
         command: process.execPath,
         arguments: ["-e", 'process.stderr.write("controlled worker complete")'],
       });
@@ -455,6 +467,12 @@ it("releases a retained process independently while a root cleanup retry remains
       if (arch !== undefined) Object.defineProperty(process, "arch", arch);
       const launched = await spawnOwnedProviderProcess({
         ...spawn,
+        hostEnvironment: {
+          ...spawn.hostEnvironment,
+          ...(process.platform === "win32"
+            ? { SystemRoot: process.env.SystemRoot }
+            : {}),
+        },
         command: process.execPath,
         arguments: ["-e", 'process.stderr.write("worker complete")'],
       });
@@ -559,6 +577,12 @@ it("preserves an active cancellation through denied owned-group cleanup and late
       if (arch !== undefined) Object.defineProperty(process, "arch", arch);
       const launched = await spawnOwnedProviderProcess({
         ...spawn,
+        hostEnvironment: {
+          ...spawn.hostEnvironment,
+          ...(process.platform === "win32"
+            ? { SystemRoot: process.env.SystemRoot }
+            : {}),
+        },
         command: process.execPath,
         arguments: [
           "-e",

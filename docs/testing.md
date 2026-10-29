@@ -134,10 +134,12 @@ Vitest projects use up to two workers, bounded by host parallelism.
 `process-boundary` runs later with serial files because process-tree sampling
 shares host resources. Acceptance and process-global cases use isolated forks
 without serial scheduling. Pure domain/service, composition, conformance,
-evaluation, CLI boundary, and MCP boundary projects share module graphs. Their
+evaluation, and MCP boundary projects share module graphs. Their
 tests avoid process-global state and keep resource cleanup test-scoped. Each
 MCP session still owns its resources, and CLI cases retain fresh command
-instances or subprocesses. CLI and MCP module mocks belong in `tests/process-global/`
+instances or subprocesses. CLI boundary files retain per-file isolation because
+their in-process analysis and MCP schema graphs can exhaust a reused worker's
+bounded heap. CLI and MCP module mocks belong in `tests/process-global/`
 so they keep per-file isolation. Product catalog verification stays with the
 isolated filesystem boundary tests because it loads both source and compiled
 module graphs. Adapter, other boundary, acceptance, and process-global projects
@@ -155,11 +157,14 @@ rendered declarations. Keep canonical rejection checks separate from the
 intentionally reduced compact advertisement, and probe actual client renderers
 when changing schema representations.
 
-The reused CLI boundary workers cap V8 old space at 384 MiB for ordinary runs
-and 512 MiB with coverage enabled. Covered ADB fixtures exhaust the ordinary
-384 MiB budget; those fixtures also complete with the shared CLI graph preloaded
-at 512 MiB. This is a measured capacity control, not a suite-wide speedup claim.
-Both profiles keep the
+For isolated canonical recording, use
+`node scripts/record-mcp-catalog.mjs --output-directory PATH` with an existing
+owned output directory. It reads the package's compiled registrations without
+copying them; ordinary builds still write the generated files under `dist`.
+
+CLI boundary workers cap V8 old space at 384 MiB for ordinary runs
+and retain the 512 MiB profile with coverage enabled. Per-file isolation bounds
+retained module state without increasing either heap limit. Both profiles keep the
 same bounded worker count, and spawned REA processes retain their own heap
 settings. Explicitly disabling coverage retains the ordinary profile; coverage
 provider options alone do not enable instrumentation.

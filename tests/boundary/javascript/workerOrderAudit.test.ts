@@ -310,7 +310,7 @@ it("retains coalesced static evidence when abort follows a resource frame", asyn
       });
       launched.process.stdout?.on("data", (chunk: Buffer | string) => {
         if (String(chunk).includes("resource failure before abort"))
-          setTimeout(() => controller.abort(null), 5);
+          queueMicrotask(() => controller.abort(null));
       });
       return launched;
     },
@@ -662,7 +662,7 @@ it("keeps abort-first cancellation when the owned worker exits during stop", asy
       launched.process.once("exit", () => {
         exitedDuringStop = controller.signal.aborted;
       });
-      return { process: launched.process, ownership: launched.ownership };
+      return launched;
     },
   );
   try {
@@ -692,7 +692,7 @@ it("bounds exit-output drain when a descendant holds the inherited pipe", async 
         ...request,
         arguments: [
           "-e",
-          `${ready} const {spawn}=require("node:child_process"); spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{stdio:"inherit"}); process.stdin.once("data",()=>process.exit(7));`,
+          `${ready} const {spawn}=require("node:child_process"); spawn(process.execPath,["-e","setInterval(()=>{},1000)"],{detached:process.platform==="win32",stdio:"inherit"}); process.stdin.once("data",()=>process.exit(7));`,
         ],
       });
       launched.process.once("exit", () => {
@@ -733,7 +733,7 @@ it("admits a final valid control frame written after the worker exit event", asy
         limits: null,
         message: "final response after child exit",
       };
-      const script = `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", chunk => { const response=${JSON.stringify(response)}; response.id=JSON.parse(String(chunk)).id; const frame=JSON.stringify(response)+"\\n"; const lateScript="setTimeout(()=>process.stdout.write("+JSON.stringify(frame)+"),50); setInterval(()=>{},1000)"; spawn(process.execPath,["-e",lateScript],{stdio:["ignore","inherit","ignore"]}); process.exit(7); });`;
+      const script = `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", chunk => { const response=${JSON.stringify(response)}; response.id=JSON.parse(String(chunk)).id; const frame=JSON.stringify(response)+"\\n"; const lateScript="setTimeout(()=>process.stdout.write("+JSON.stringify(frame)+"),50); setInterval(()=>{},1000)"; spawn(process.execPath,["-e",lateScript],{detached:process.platform==="win32",stdio:["ignore","inherit","ignore"]}); process.exit(7); });`;
       const launched = await spawnOwnedProviderProcess({
         ...request,
         arguments: ["-e", script],
@@ -815,7 +815,7 @@ it("captures late stderr completely when the exited worker's inherited pipes clo
         ...request,
         arguments: [
           "-e",
-          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>{process.stderr.write('late stderr tail');process.exit(0)},80)"],{stdio:["ignore","inherit","inherit"]}); process.exit(7); });`,
+          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>{process.stderr.write('late stderr tail');process.exit(0)},80)"],{detached:process.platform==="win32",stdio:["ignore","inherit","inherit"]}); process.exit(7); });`,
         ],
       }),
   );
@@ -843,7 +843,7 @@ it("marks worker diagnostics incomplete when caller abort interrupts inherited-p
         ...request,
         arguments: [
           "-e",
-          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>{process.stderr.write('late stderr tail');process.exit(0)},1000)"],{stdio:["ignore","inherit","inherit"]}); process.exit(7); });`,
+          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>{process.stderr.write('late stderr tail');process.exit(0)},1000)"],{detached:process.platform==="win32",stdio:["ignore","inherit","inherit"]}); process.exit(7); });`,
         ],
       });
       launched.process.once("exit", () => {
@@ -912,7 +912,7 @@ it("keeps cancellation after successful exit while a final response is pending",
         ...request,
         arguments: [
           "-e",
-          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", chunk => { const id=JSON.parse(String(chunk)).id; const frame=JSON.stringify({kind:"failure",id,reason:"output",resource:null,limits:null,message:"late healthy response"})+"\\n"; const lateScript="setTimeout(()=>process.stdout.write("+JSON.stringify(frame)+"),500)"; spawn(process.execPath,["-e",lateScript],{stdio:["ignore","inherit","ignore"]}); process.exit(0); });`,
+          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", chunk => { const id=JSON.parse(String(chunk)).id; const frame=JSON.stringify({kind:"failure",id,reason:"output",resource:null,limits:null,message:"late healthy response"})+"\\n"; const lateScript="setTimeout(()=>process.stdout.write("+JSON.stringify(frame)+"),500)"; spawn(process.execPath,["-e",lateScript],{detached:process.platform==="win32",stdio:["ignore","inherit","ignore"]}); process.exit(0); });`,
         ],
       });
       launched.process.once("exit", () => {
@@ -994,8 +994,10 @@ it("keeps a failed exit primary over a later request-stream error", async () => 
           `${ready} process.stdin.once("data", () => process.exit(7));`,
         ],
       });
-      launched.process.once("exit", () => {
-        queueMicrotask(() => {
+      // Install after adoption so the supervisor records exit before the input
+      // failure. Windows closes the request pipe during final process cleanup.
+      launched.process.stdout?.once("data", () => {
+        launched.process.once("exit", () => {
           launched.process.stdin?.emit("error", new Error("late EPIPE"));
           controller.abort("late abort");
         });
@@ -1029,7 +1031,7 @@ it("keeps a failed exit primary over malformed descendant control output", async
         ...request,
         arguments: [
           "-e",
-          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>process.stdout.write('not-json\\\\n'),50);setInterval(()=>{},1000)"],{stdio:["ignore","inherit","ignore"]}); process.exit(7); });`,
+          `${ready} const {spawn}=require("node:child_process"); process.stdin.once("data", () => { spawn(process.execPath,["-e","setTimeout(()=>process.stdout.write('not-json\\\\n'),50);setInterval(()=>{},1000)"],{detached:process.platform==="win32",stdio:["ignore","inherit","ignore"]}); process.exit(7); });`,
         ],
       }),
   );
@@ -1104,7 +1106,7 @@ it("does not let a wrong-job failure frame override later caller abort", async (
       launched.process.stdout?.on("data", (chunk: Buffer | string) => {
         if (String(chunk).includes("unrelated job failure")) {
           completeFrameSeen = true;
-          setTimeout(() => controller.abort(reason), 5);
+          queueMicrotask(() => controller.abort(reason));
         }
       });
       return launched;

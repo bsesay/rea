@@ -225,6 +225,7 @@ describe("Inspector script exclusions", () => {
     ]);
     return {
       producer: result.value.scripts.excluded,
+      parseFailed: result.value.scripts.parse_failed_total,
       completeness: parsed?.inspection.completeness,
     };
   };
@@ -238,27 +239,28 @@ describe("Inspector script exclusions", () => {
   };
 
   it("keeps invalid protocol scripts out of policy filtering", async () => {
-    const { producer, completeness } = await reconcileV8Scripts([
+    const { producer, completeness, parseFailed } = await reconcileV8Scripts([
       failedToParse,
       missingUrl,
     ]);
+    expect(parseFailed).toBe(1);
     expect(producer).toEqual({
       unsupported_location: 0,
-      invalid_protocol_value: 2,
+      invalid_protocol_value: 1,
     });
     expect(completeness).toMatchObject({
       status: "attach_limited",
       conditions: ["attach_limited"],
       policy_filtered_sections: [],
       excluded: [
-        { section: "scripts", reason: "invalid_protocol_value", count: 2 },
+        { section: "scripts", reason: "invalid_protocol_value", count: 1 },
       ],
     });
     expect(completeness?.unavailable_sections).toContain("scripts");
   });
 
   it("reports unsupported and invalid script exclusions separately", async () => {
-    const { producer, completeness } = await reconcileV8Scripts([
+    const { producer, completeness, parseFailed } = await reconcileV8Scripts([
       failedToParse,
       {
         method: "Debugger.scriptParsed",
@@ -269,19 +271,19 @@ describe("Inspector script exclusions", () => {
         },
       },
     ]);
+    expect(parseFailed).toBe(1);
     expect(producer).toEqual({
       unsupported_location: 1,
-      invalid_protocol_value: 1,
+      invalid_protocol_value: 0,
     });
     expect(completeness).toMatchObject({
       status: "policy_filtered",
       conditions: ["attach_limited", "policy_filtered"],
       policy_filtered_sections: ["scripts"],
       excluded: [
-        { section: "scripts", reason: "invalid_protocol_value", count: 1 },
         { section: "scripts", reason: "out_of_target_scope", count: 1 },
       ],
     });
-    expect(completeness?.unavailable_sections).toContain("scripts");
+    expect(completeness?.unavailable_sections).not.toContain("scripts");
   });
 });

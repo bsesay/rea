@@ -107,7 +107,7 @@ describe("resolved member signature digests", () => {
   it.each([
     ["a TypeSpec, whose blob member inspection does not decode", (1 << 2) | 2],
     ["a TypeRef row outside its table", (9 << 2) | 1],
-  ])("does not name %s", (_name, codedIndex) => {
+  ])("rejects a signature referencing %s", (_name, codedIndex) => {
     const bytes = buildManagedPeFixture({
       fieldSignature: Buffer.from([0x06, 0x12, codedIndex]),
     });
@@ -116,7 +116,7 @@ describe("resolved member signature digests", () => {
       managedPeFixtureTarget(bytes),
     ).fields[0];
 
-    expect(field?.signature.parse_status).toBe("decoded");
+    expect(field?.signature.parse_status).toBe("malformed");
     expect(field?.signature.resolved_sha256).toBeNull();
   });
 
